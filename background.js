@@ -157,6 +157,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (message.type === "SUMMARIZE_CONVERSATION") {
+    summarizeConversation(message.conversation)
+      .then((summary) => {
+        chrome.runtime.sendMessage({
+          type: "SUMMARY_RESULT",
+          summary: summary,
+        });
+      })
+      .catch((error) => {
+        console.error("Summarization error:", error);
+        chrome.runtime.sendMessage({
+          type: "SUMMARY_RESULT",
+          summary: "Failed to generate summary: " + error.message,
+        });
+      });
+    return true;
+  }
 });
 
 async function translateText(text, targetLang) {
@@ -340,5 +358,125 @@ function parseModelResponse(responseText) {
   } catch (parseError) {
     console.error("Failed to parse model response:", parseError);
     return cleanedText; // Fallback to raw response
+  }
+}
+
+// Create a new function to summarize conversation
+async function summarizeConversation(conversation) {
+  try {
+    console.log(
+      "Summarizing conversation:",
+      conversation.substring(0, 100) + "..."
+    );
+
+    // Check if we should use the local model and it's available
+    if (translationModel === "local" && localModelAvailable) {
+      return await summarizeWithLocalModel(conversation);
+    } else {
+      return await summarizeWithGeminiAPI(conversation);
+    }
+  } catch (error) {
+    console.error("Summarization error:", error);
+    throw new Error("Failed to summarize conversation");
+  }
+}
+
+// Summarize using local model
+async function summarizeWithLocalModel(conversation) {
+  try {
+    if (!translator_session) {
+      throw new Error("Local model not initialized");
+    }
+
+    // Create system prompt for summarization
+    const summarySystemPrompt = `You are a helpful chat summarization assistant. 
+    Given a conversation between two or more people, provide a concise yet comprehensive summary that captures:
+    - The main topics discussed
+    - Key decisions or conclusions reached
+    - Action items or next steps mentioned
+    Your summary should be well-structured, clear, and suitable for someone who needs to quickly understand what was discussed.`;
+
+    // Use temporary session with summary prompt
+    const summary_session = await ai.languageModel.create({
+      systemPrompt: summarySystemPrompt,
+    });
+
+    const response = await summary_session.prompt(conversation);
+    return response.text.trim();
+  } catch (error) {
+    console.error("Local model summarization error:", error);
+    return summarizeWithGeminiAPI(conversation);
+  }
+}
+
+// Summarize using Gemini API
+async function summarizeWithGeminiAPI(conversation) {
+  const API_KEY = "AIzaSyD1ZDwTDuyBN9PN6UeuLa67NwIiLyK79Cs";
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${API_KEY}`;
+
+  try {
+    console.log("Using Gemini API for summarization");
+
+    // Create prompt for summarization
+    const prompt = `Please provide a concise but comprehensive summary of the following conversation, highlighting the main topics discussed, any decisions made, and action items:
+    
+${conversation}
+
+Summary:`;
+
+    // System instruction for summarization
+    const systemInstruction = `You are a chat summarization expert. Your task is to create clear, concise summaries of conversations while preserving the key information and insights. Focus on:
+    - The main topics and themes
+    - Any decisions or conclusions reached
+    - Action items or follow-ups needed
+    - Keep your summary well-structured and easily scannable.`;
+
+    // Prepare the request body
+    const requestBody = {
+      system_instruction: {
+        parts: [{ text: systemInstruction }],
+      },
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.4,
+        topP: 0.8,
+        topK: 32,
+        maxOutputTokens: 800,
+      },
+    };
+
+    // Make the API request
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API responded with status: ${response.status}`);
+    }
+
+    // Parse the JSON response
+    const data = await response.json();
+
+    // Extract the summary from the response
+    if (
+      data.candidates &&
+      data.candidates[0] &&
+      data.candidates[0].content &&
+      data.candidates[0].content.parts &&
+      data.candidates[0].content.parts[0]
+    ) {
+      return data.candidates[0].content.parts[0].text.trim();
+    } else {
+      throw new Error("Invalid response format from Gemini API");
+    }
+  } catch (error) {
+    console.error("Gemini API summarization error:", error);
+    return "Failed to generate summary using Gemini API. Please try again later.";
   }
 }

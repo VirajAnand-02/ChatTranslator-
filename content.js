@@ -5,6 +5,11 @@ let observerActive = false;
 let currentChatId = null;
 let chatChangeObserver = null;
 
+// Add variables for summarization
+let isSummarizing = false;
+let recordedMessages = [];
+let floatingSummarizeBtn = null;
+
 // Initialize the extension
 function initialize() {
   // Check settings first
@@ -30,6 +35,25 @@ function initialize() {
         disconnectObservers();
       }
 
+      sendResponse({ success: true });
+      return true;
+    }
+
+    // Handle summarization commands
+    if (message.type === "START_SUMMARIZING") {
+      startSummarizing();
+      sendResponse({ success: true });
+      return true;
+    }
+
+    if (message.type === "CANCEL_SUMMARIZING") {
+      cancelSummarizing();
+      sendResponse({ success: true });
+      return true;
+    }
+
+    if (message.type === "FINISH_SUMMARIZING") {
+      finishSummarizing();
       sendResponse({ success: true });
       return true;
     }
@@ -365,13 +389,18 @@ function getMessageId(bubble) {
 
 // Process a chat bubble for translation with improved handling of complex messages
 function processChatBubble(bubble) {
-  if (!translationEnabled) return;
+  if (!translationEnabled && !isSummarizing) return;
 
   const messageId = getMessageId(bubble);
   if (processedMessages.has(messageId)) return;
 
   // Mark as processed to avoid double-processing
   processedMessages.add(messageId);
+
+  // Record message for summarization if in summarizing mode
+  if (isSummarizing) {
+    recordMessageForSummary(bubble);
+  }
 
   // Check if this is a document/file message without caption
   if (isDocumentWithoutCaption(bubble)) {
@@ -1026,6 +1055,186 @@ function checkForMediaContent(bubble) {
     bubble.querySelector('[data-testid="document-thumb"]');
 
   return hasImage || hasVideo || hasAudio || hasDocument;
+}
+
+// Start recording messages for summarization
+function startSummarizing() {
+  isSummarizing = true;
+  recordedMessages = [];
+
+  // Create floating button
+  createFloatingSummarizeButton();
+
+  console.log("Started recording messages for summarization");
+}
+
+// Cancel summarization
+function cancelSummarizing() {
+  isSummarizing = false;
+  recordedMessages = [];
+
+  // Remove message highlights
+  document.querySelectorAll(".recording-message").forEach((el) => {
+    el.classList.remove("recording-message");
+  });
+
+  // Remove floating button
+  removeFloatingSummarizeButton();
+
+  console.log("Cancelled message recording");
+}
+
+// Finish summarization and generate summary
+function finishSummarizing() {
+  if (recordedMessages.length === 0) {
+    chrome.runtime.sendMessage({
+      type: "SUMMARY_RESULT",
+      summary:
+        "No messages were recorded. Try again and make sure to view some messages while recording.",
+    });
+
+    cancelSummarizing();
+    return;
+  }
+
+  // Remove floating button
+  removeFloatingSummarizeButton();
+
+  // Create conversation text
+  const conversation = formatConversation(recordedMessages);
+
+  // Send to background script for summarization
+  chrome.runtime.sendMessage({
+    type: "SUMMARIZE_CONVERSATION",
+    conversation: conversation,
+  });
+
+  // Reset state
+  isSummarizing = false;
+
+  // Remove message highlights with a slight delay so user can see what was included
+  setTimeout(() => {
+    document.querySelectorAll(".recording-message").forEach((el) => {
+      el.classList.remove("recording-message");
+    });
+  }, 1000);
+
+  console.log("Generating summary from recorded messages");
+}
+
+// Format recorded messages into a conversation
+function formatConversation(messages) {
+  let formattedText = "";
+
+  messages.forEach((msg) => {
+    formattedText += `[${msg.time}] ${msg.sender}: ${msg.text}\n`;
+  });
+
+  return formattedText;
+}
+
+// Create floating summarize button
+function createFloatingSummarizeButton() {
+  if (floatingSummarizeBtn) return;
+
+  floatingSummarizeBtn = document.createElement("button");
+  floatingSummarizeBtn.className = "floating-summarize-btn";
+  floatingSummarizeBtn.innerHTML = `Finish & Summarize <span class="count">0</span>`;
+
+  floatingSummarizeBtn.addEventListener("click", finishSummarizing);
+
+  document.body.appendChild(floatingSummarizeBtn);
+
+  updateMessageCount();
+}
+
+// Remove floating summarize button
+function removeFloatingSummarizeButton() {
+  if (floatingSummarizeBtn) {
+    floatingSummarizeBtn.remove();
+    floatingSummarizeBtn = null;
+  }
+}
+
+// Update message count on the floating button
+function updateMessageCount() {
+  if (floatingSummarizeBtn) {
+    const countEl = floatingSummarizeBtn.querySelector(".count");
+    if (countEl) {
+      countEl.textContent = recordedMessages.length.toString();
+    }
+  }
+}
+
+// Record message for summarization
+function recordMessageForSummary(bubble) {
+  // Find the message container
+  const messageElement = findActualMessageText(bubble);
+  if (
+    !messageElement ||
+    !messageElement.textContent ||
+    !messageElement.textContent.trim()
+  ) {
+    return;
+  }
+
+  // Get message text
+  const messageText = messageElement.textContent.trim();
+
+  // Skip if it's a system message or UI element
+  if (
+    isWhatsAppUIElement(messageElement, messageText) ||
+    isFileNameElement(messageElement, messageText)
+  ) {
+    return;
+  }
+
+  // Get time from the message element or use current time
+  let messageTime = "";
+  const timeElement =
+    bubble.querySelector(".x1c4vz4f.x2lah0s") ||
+    bubble.querySelector("[aria-hidden='true'] span") ||
+    bubble.querySelector(".x1rg5ohu.x16dsc37");
+
+  if (timeElement) {
+    messageTime = timeElement.textContent.trim();
+  } else {
+    // Use current time as fallback
+    const now = new Date();
+    messageTime = now.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  // Get sender name
+  let senderName = "Unknown";
+  const senderElement =
+    bubble.querySelector("._ahxt") ||
+    bubble.querySelector("[dir='auto'][class*='_ao3e']");
+
+  if (senderElement) {
+    senderName = senderElement.textContent.trim();
+  } else if (bubble.classList.contains("message-out")) {
+    senderName = "You";
+  }
+
+  // Add to recorded messages
+  recordedMessages.push({
+    time: messageTime,
+    sender: senderName,
+    text: messageText,
+  });
+
+  // Mark the bubble as being recorded
+  bubble.classList.add("recording-message");
+
+  // Update count on button
+  updateMessageCount();
+
+  console.log(
+    `Recorded message from ${senderName}: ${messageText.substring(0, 30)}...`
+  );
 }
 
 // Start the extension
