@@ -188,12 +188,12 @@ async function translateWithLocalModel(text, targetLang) {
       throw new Error("Local model not initialized");
     }
 
-    const response = await translator_session.sendMessage({
-      text: JSON.stringify({
+    const response = await translator_session.prompt(
+      JSON.stringify({
         text: text,
         targetLanguage: targetLang,
-      }),
-    });
+      })
+    );
 
     // Use the shared parsing function instead of inline parsing
     return parseModelResponse(response.text);
