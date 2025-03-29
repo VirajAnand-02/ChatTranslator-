@@ -25,19 +25,23 @@
         margin-bottom: 15px;
       }
       #targetLanguage {
-        background: transparent;
         border: none;
-        padding: 0;
-        color: white;
-        margin: 0;
-        -webkit-appearance: none; /* For Safari */
-        -moz-appearance: none; /* For Firefox */
-        outline: none;
-        width: 100%;
         padding: 8px;
+        color: white; /* Text color */
+        background: rgb(31, 42, 73); /* Background color */
+        width: 100%;
+        outline: none;
+        appearance: none;
+        border-radius: 50px;
+        padding-left: 16px;
       }
+
       #targetLanguage option {
-        color: black;
+        color: white; /* Text color */
+        background: black; /* Background color */
+      }
+      .radio-group{
+        margin-bottom: 16px;
       }
     </style>
     <link
@@ -54,9 +58,11 @@
       <div class="option-title text-lg font-bold">Translation Settings</div>
 
       <div class="toggle-container">
-        <label for="targetLanguage">Default Target Language:</label>
+        <label for="targetLanguage border-none text-black"
+          >Default Target Language:</label
+        >
         <div class="custom-select">
-          <select id="targetLanguage ">
+          <select id="targetLanguage">
             <option value="en">English</option>
             <option value="es">Spanish</option>
             <option value="fr">French</option>
