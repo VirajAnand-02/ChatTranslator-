@@ -4,6 +4,24 @@ let translationModel = "local"; // Default to local model
 let translator_session = null;
 let localModelAvailable = false;
 
+const systemPrompt = `You are a translation assistant specializing in informal, natural chat text. Your job is to translate text while maintaining:
+
+Casual Tone: Keep slang, idioms, and conversational style.
+Accuracy: Preserve the original meaning and nuances.
+Natural Flow: Make it sound like a native speaker wrote it.
+Context Awareness: Adapt to cultural differences.
+Conciseness: No extra commentary—just a direct translation.
+
+ignore filler words
+
+Output must be JSON string only (no md formatting):
+
+{
+  "translatedText": "translated text",
+  "failed": "true / false"
+}
+`;
+
 // Initialize settings from storage
 chrome.storage.local.get(
   ["translationEnabled", "targetLanguage", "translationModel"],
@@ -42,54 +60,27 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(async () => {
   console.log("Browser started - initializing extension");
 
-  // Try to initialize local model
+  // First try initializing local model
   try {
     translator_session = await ai.languageModel.create({
-      systemPrompt: `You are a translation assistant whose sole responsibility is to translate natural, informal chat text into the specified target language. When performing translations, ensure that:
-  
-      Tone & Style: The casual, conversational tone and informal nuances (including slang, idioms, and colloquial expressions) of the source text are maintained in the translation.
-      Accuracy: The meaning of the original text is preserved exactly. Ensure that all subtleties and implied meanings are accurately conveyed
-      Natural Flow: The translated text reads naturally as if it were originally written in the target language. Avoid overly formal or stilted language.
-      Context Awareness: Be mindful of cultural nuances and context so that the translated text is both accurate and relatable to native speakers of the target language.
-      Conciseness: Translate directly without adding any extra commentary or unnecessary embellishments.
-  
-      When given a piece of natural, informal chat text along with a target language, provide an accurate and idiomatic translation that reflects how a native speaker would express the same sentiment in everyday conversation.
-  
-      input will be in json:
-      {
-        text: "text to translate",
-        targetLanguage: "en | english"
-      }
-  
-      Output must be in the following json format:
-      {
-        translatedText: "translated text",
-        failed: "true / false"
-      }
-      `,
+      systemPrompt: systemPrompt,
     });
     localModelAvailable = true;
-
-    // If local model is preferred and available, use it
-    if (translationModel === "local") {
-      console.log("Using local Gemini Nano model for translation");
-    } else {
-      console.log(
-        "Local model available but using web API as per user preference"
-      );
-    }
+    console.log("Local Gemini Nano model initialized successfully");
   } catch (error) {
     console.log("Local model not available:", error);
     localModelAvailable = false;
+  }
 
-    // If local model was preferred but is not available, switch to web API
-    if (translationModel === "local") {
-      translationModel = "web";
-      chrome.storage.local.set({ translationModel: "web" });
-      console.log(
-        "Switched to web API translation due to local model unavailability"
-      );
-    }
+  // No need to initialize Google GenAI, we'll use direct API calls
+
+  // Update model selection based on availability
+  if (!localModelAvailable && translationModel === "local") {
+    translationModel = "web";
+    chrome.storage.local.set({ translationModel: "web" });
+    console.log(
+      "Switched to web API translation due to local model unavailability"
+    );
   }
 
   // Notify any open options pages about model availability
@@ -169,17 +160,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function translateText(text, targetLang) {
-  // return `[${targetLang}] ${text}`; // temp Only for while debugging and development
   try {
+    // Debug log to track translation flow
+    console.log(
+      `Translating text (${text.length} chars) to ${targetLang}. Models: Local=${localModelAvailable}`
+    );
+
+    // Check if we should use the local model and it's available
     if (translationModel === "local" && localModelAvailable) {
       return await translateWithLocalModel(text, targetLang);
-    } else {
-      return `[${targetLang}] ${text}`; // temp Only for while debugging and development
-      return await translateWithWebAPI(text, targetLang);
+    }
+    // Use direct Gemini API instead of Google GenAI
+    else {
+      return await translateWithGeminiAPI(text, targetLang);
     }
   } catch (error) {
     console.error("Translation error:", error);
-    throw new Error("Failed to translate text");
+    // Always return something, even if translation fails
+    return `[${targetLang}] ${text}`;
   }
 }
 
@@ -210,10 +208,100 @@ async function translateWithLocalModel(text, targetLang) {
     }
   } catch (error) {
     console.error("Local translation error:", error);
-    // Fallback to web API if local translation fails
+    // Try direct Gemini API if local model fails
+    console.log("Falling back to Gemini API for this translation");
+    return translateWithGeminiAPI(text, targetLang);
+  }
+}
+
+// New function to translate using direct Gemini API
+async function translateWithGeminiAPI(text, targetLang) {
+  // Gemini API key (same as the one used previously)
+  const API_KEY = "AIzaSyD1ZDwTDuyBN9PN6UeuLa67NwIiLyK79Cs";
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+
+  try {
+    console.log(`Using Gemini API to translate to ${targetLang}`);
+
+    // Create prompt for translation
+
+    const prompt = `Translate this text to ${targetLang}. Provide ONLY the translated text without any explanations or additional text: "${text}"`;
+
+    // Prepare the request body
+    const requestBody = {
+      system_instruction: {
+        parts: [
+          {
+            text: systemPrompt,
+          },
+        ],
+      },
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        topP: 0.8,
+        topK: 40,
+      },
+    };
+
+    // Make the API request
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API responded with status: ${response.status}`);
+    }
+
+    // Parse the JSON response
+    const data = await response.json();
+
+    // Extract the translation from the response
+    if (
+      data.candidates &&
+      data.candidates[0] &&
+      data.candidates[0].content &&
+      data.candidates[0].content.parts &&
+      data.candidates[0].content.parts[0]
+    ) {
+      const translatedText = data.candidates[0].content.parts[0].text.trim();
+
+      // Debug log
+      console.log(
+        "Gemini API translation successful:",
+        `${text.substring(0, 30)}... -> ${translatedText.substring(0, 30)}...`
+      );
+
+      // Parse the response
+    try {
+      const result = JSON.parse(translatedText);
+      if (result.failed === "true") {
+        throw new Error("Translation failed");
+      }
+      return result.translatedText;
+    } catch (parseError) {
+      console.error("Failed to parse model response:", parseError);
+      return translatedText; // Fallback to raw response
+    }
+
+      // return translatedText;
+
+    } else {
+      throw new Error("Invalid response format from Gemini API");
+    }
+  } catch (error) {
+    console.error("Gemini API translation error:", error);
+    // Fall back to web API
     console.log("Falling back to web API for this translation");
-    return `[${targetLang}] ${text}`; // temp Only for while debugging and development
-    return translateWithWebAPI(text, targetLang);
+    return await translateWithWebAPI(text, targetLang);
   }
 }
 

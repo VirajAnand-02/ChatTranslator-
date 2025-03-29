@@ -1,14 +1,22 @@
 document.addEventListener("DOMContentLoaded", function () {
-  // Check if "getStartedBtn" exists before adding event listener
-  const getStartedBtn = document.getElementById("getStartedBtn");
+  // Initialize dropdown behavior if needed
+  const targetLanguageSelect = document.getElementById("targetLanguage");
+  const forwardIcon = document.getElementById("forward");
 
-  if (getStartedBtn) {
-    getStartedBtn.addEventListener("click", function () {
-      // Navigate to the get started page
-      window.location.href = "getStarted.html";
+  if (targetLanguageSelect && forwardIcon) {
+    // Add any special dropdown behavior if needed
+    forwardIcon.addEventListener("click", function () {
+      targetLanguageSelect.click(); // Trigger the dropdown when forward icon is clicked
     });
   }
 
-  // Additional initialization if needed
-  console.log("Popup initialization completed");
+  // Initialize any other UI elements
+  const translationToggle = document.getElementById("translationToggle");
+  if (translationToggle) {
+    // Make sure the toggle is properly initialized (if needed)
+    translationToggle.checked = true; // Default to enabled
+  }
+
+  // Log completion
+  console.log("Popup initialization completed successfully");
 });

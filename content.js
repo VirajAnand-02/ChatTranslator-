@@ -161,6 +161,9 @@ function handleChatChange() {
   // Clear the processed messages cache
   processedMessages.clear();
 
+  // NEW: Also clear the translated messages tracking
+  translatedMessages.clear();
+
   // Wait a short time for the new chat to fully load
   setTimeout(() => {
     console.log("Processing messages in new chat");
@@ -389,6 +392,16 @@ function processChatBubble(bubble) {
     return;
   }
 
+  // NEW: Check if this element or message has already been translated
+  if (
+    textElement.classList.contains("whatsapp-translated") ||
+    bubble.querySelector(".translation-overlay") ||
+    messageWasTranslated(messageId)
+  ) {
+    console.log("Skipping message: Already translated");
+    return;
+  }
+
   // Get the text content for analysis
   let originalText = textElement.textContent.trim();
 
@@ -437,7 +450,12 @@ function processChatBubble(bubble) {
     (response) => {
       if (response && response.success && response.translatedText) {
         // Add the translation
-        appendTranslation(textElement, response.translatedText, originalText);
+        appendTranslation(
+          textElement,
+          response.translatedText,
+          originalText,
+          messageId
+        );
       } else {
         console.log(
           "Translation failed for message: ",
@@ -446,6 +464,79 @@ function processChatBubble(bubble) {
       }
     }
   );
+}
+
+// NEW: Create a Set to track message IDs that have been translated
+const translatedMessages = new Set();
+
+// NEW: Function to check if a message was already translated
+function messageWasTranslated(messageId) {
+  return translatedMessages.has(messageId);
+}
+
+// Append the translation to the message
+function appendTranslation(element, translatedText, originalText, messageId) {
+  // Skip if they're the same or if translation failed
+  if (
+    translatedText === originalText ||
+    translatedText.includes("Failed to translate")
+  )
+    return;
+
+  // NEW: Skip if this element already has a translation overlay as a sibling
+  const parentElement = element.parentElement;
+  if (parentElement) {
+    const existingOverlays = parentElement.querySelectorAll(
+      ".translation-overlay"
+    );
+    if (existingOverlays.length > 0) {
+      console.log("Translation overlay already exists, skipping");
+      return;
+    }
+  }
+
+  // NEW: Skip if the message was already translated (belt and suspenders approach)
+  if (messageWasTranslated(messageId)) {
+    console.log("Message already translated (tracked in Set), skipping");
+    return;
+  }
+
+  // Create translation overlay
+  const translationEl = document.createElement("div");
+  translationEl.className = "translation-overlay";
+  translationEl.style.fontSize = "0.9em";
+  translationEl.style.fontStyle = "italic";
+  translationEl.style.marginTop = "4px";
+  translationEl.style.color = "#a8a8a8";
+  translationEl.style.padding = "2px 8px";
+  translationEl.style.borderLeft = "3px solid #2196f3";
+  translationEl.textContent = translatedText;
+
+  // Try to find the right parent to append to
+  const messageContainer =
+    element.closest(".copyable-text") ||
+    element.closest("[role=row]") ||
+    element.closest(".x78zum5") || // Using class from provided HTML
+    element.parentElement;
+
+  if (messageContainer) {
+    messageContainer.appendChild(translationEl);
+
+    // NEW: Mark the element and messageId as translated
+    element.classList.add("whatsapp-translated");
+    translatedMessages.add(messageId);
+
+    console.log("Translation added successfully");
+  } else {
+    // If can't find a proper container, append after the element itself
+    element.parentElement.insertBefore(translationEl, element.nextSibling);
+
+    // NEW: Mark the element and messageId as translated
+    element.classList.add("whatsapp-translated");
+    translatedMessages.add(messageId);
+
+    console.log("Translation added successfully (fallback method)");
+  }
 }
 
 // Find the actual message text, avoiding file names and UI elements
@@ -630,13 +721,31 @@ function findTextElement(bubble) {
 }
 
 // Append the translation to the message
-function appendTranslation(element, translatedText, originalText) {
+function appendTranslation(element, translatedText, originalText, messageId) {
   // Skip if they're the same or if translation failed
   if (
     translatedText === originalText ||
     translatedText.includes("Failed to translate")
   )
     return;
+
+  // NEW: Skip if this element already has a translation overlay as a sibling
+  const parentElement = element.parentElement;
+  if (parentElement) {
+    const existingOverlays = parentElement.querySelectorAll(
+      ".translation-overlay"
+    );
+    if (existingOverlays.length > 0) {
+      console.log("Translation overlay already exists, skipping");
+      return;
+    }
+  }
+
+  // NEW: Skip if the message was already translated (belt and suspenders approach)
+  if (messageWasTranslated(messageId)) {
+    console.log("Message already translated (tracked in Set), skipping");
+    return;
+  }
 
   // Create translation overlay
   const translationEl = document.createElement("div");
@@ -658,9 +767,21 @@ function appendTranslation(element, translatedText, originalText) {
 
   if (messageContainer) {
     messageContainer.appendChild(translationEl);
+
+    // NEW: Mark the element and messageId as translated
+    element.classList.add("whatsapp-translated");
+    translatedMessages.add(messageId);
+
+    console.log("Translation added successfully");
   } else {
     // If can't find a proper container, append after the element itself
     element.parentElement.insertBefore(translationEl, element.nextSibling);
+
+    // NEW: Mark the element and messageId as translated
+    element.classList.add("whatsapp-translated");
+    translatedMessages.add(messageId);
+
+    console.log("Translation added successfully (fallback method)");
   }
 }
 
