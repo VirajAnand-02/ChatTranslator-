@@ -87,6 +87,13 @@
         color: #2196f3;
         text-decoration: none;
       }
+
+      .model-indicator {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #777;
+        text-align: center;
+      }
     </style>
   </head>
   <body>
@@ -114,6 +121,10 @@
         <option value="zh">Chinese</option>
         <option value="hi">Hindi</option>
       </select>
+    </div>
+
+    <div class="model-indicator" id="activeModel">
+      Translation model: <span id="modelName">Loading...</span>
     </div>
 
     <div class="footer">
