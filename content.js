@@ -541,12 +541,23 @@ function appendTranslation(element, translatedText, originalText, messageId) {
 
 // Find the actual message text, avoiding file names and UI elements
 function findActualMessageText(bubble) {
-  // Prioritize message text containers first
+  // First, explicitly look for the problematic class combination
+  const aoElement = bubble.querySelector(
+    "span._ao3e.selectable-text.copyable-text"
+  );
+  if (aoElement && aoElement.textContent && aoElement.textContent.trim()) {
+    console.log(
+      "Found message with _ao3e class:",
+      aoElement.textContent.trim()
+    );
+    return aoElement;
+  }
+
+  // Then check other message containers
   const messageContainers = [
     // Main message containers
     bubble.querySelector("span.selectable-text.copyable-text:not([title])"),
     bubble.querySelector("div.copyable-text span.selectable-text:not([title])"),
-
     // Handle multiline messages
     bubble.querySelector(".copyable-area .message-text"),
 
@@ -790,6 +801,15 @@ function isWhatsAppUIElement(element, text) {
   // Skip elements that are clearly part of WhatsApp's UI
   if (!element || !text) return false;
 
+  // Don't mark _ao3e elements as UI elements
+  try {
+    if (element.classList && element.classList.contains("_ao3e")) {
+      return false;
+    }
+  } catch (e) {
+    // Ignore errors in classList check
+  }
+
   try {
     // Check element title attribute for WhatsApp UI indicators
     const title = element.getAttribute("title") || "";
@@ -878,6 +898,17 @@ function isWhatsAppUIElement(element, text) {
 function isSenderNameOrMention(text, element) {
   // If element is not provided or invalid, we can't check it
   if (!element || !element.nodeType) return false;
+
+  // Skip if element has the "_ao3e" class - these are usually actual messages
+  // and not sender names, even if they start with @ symbol
+  try {
+    if (element.classList && element.classList.contains("_ao3e")) {
+      console.log("Element has _ao3e class, not treating as sender name");
+      return false;
+    }
+  } catch (e) {
+    // Ignore errors in classList check
+  }
 
   // Check if it's just a mention (starts with @ symbol)
   if (text.startsWith("@") && !text.includes(" ")) {

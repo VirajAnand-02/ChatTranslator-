@@ -14,7 +14,7 @@ Conciseness: No extra commentary—just a direct translation.
 
 ignore filler words
 
-Output must be JSON string only (no md formatting):
+Output must be JSON string only dont do markdown formatting:
 
 {
   "translatedText": "translated text",
@@ -195,17 +195,8 @@ async function translateWithLocalModel(text, targetLang) {
       }),
     });
 
-    // Parse the response
-    try {
-      const result = JSON.parse(response.text);
-      if (result.failed === "true") {
-        throw new Error("Translation failed");
-      }
-      return result.translatedText;
-    } catch (parseError) {
-      console.error("Failed to parse model response:", parseError);
-      return response.text; // Fallback to raw response
-    }
+    // Use the shared parsing function instead of inline parsing
+    return parseModelResponse(response.text);
   } catch (error) {
     console.error("Local translation error:", error);
     // Try direct Gemini API if local model fails
@@ -242,7 +233,7 @@ async function translateWithGeminiAPI(text, targetLang) {
         },
       ],
       generationConfig: {
-        temperature: 0.2,
+        temperature: 0.9,
         topP: 0.8,
         topK: 40,
       },
@@ -272,28 +263,16 @@ async function translateWithGeminiAPI(text, targetLang) {
       data.candidates[0].content.parts &&
       data.candidates[0].content.parts[0]
     ) {
-      const translatedText = data.candidates[0].content.parts[0].text.trim();
+      const rawResponse = data.candidates[0].content.parts[0].text.trim();
 
       // Debug log
       console.log(
-        "Gemini API translation successful:",
-        `${text.substring(0, 30)}... -> ${translatedText.substring(0, 30)}...`
+        "Gemini API raw response:",
+        rawResponse.substring(0, 100) + (rawResponse.length > 100 ? "..." : "")
       );
 
-      // Parse the response
-    try {
-      const result = JSON.parse(translatedText);
-      if (result.failed === "true") {
-        throw new Error("Translation failed");
-      }
-      return result.translatedText;
-    } catch (parseError) {
-      console.error("Failed to parse model response:", parseError);
-      return translatedText; // Fallback to raw response
-    }
-
-      // return translatedText;
-
+      // Use the shared parsing function
+      return parseModelResponse(rawResponse);
     } else {
       throw new Error("Invalid response format from Gemini API");
     }
@@ -328,5 +307,38 @@ async function translateWithWebAPI(text, targetLang) {
   } catch (error) {
     console.error("Web API translation error:", error);
     throw new Error("Web API translation failed: " + error.message);
+  }
+}
+
+/**
+ * Parse model response and handle various formats including markdown
+ * @param {string} responseText - Raw text from model response
+ * @returns {string} - Extracted translated text
+ */
+function parseModelResponse(responseText) {
+  if (!responseText) {
+    console.error("Empty response received");
+    return "Failed to translate";
+  }
+
+  // Clean the response text
+  let cleanedText = responseText.trim();
+
+  // Check for markdown code blocks (```json ... ```)
+  const markdownMatch = cleanedText.match(/```json([^`]+)```/);
+  if (markdownMatch) {
+    cleanedText = markdownMatch[1].trim();
+  }
+
+  // Parse the response
+  try {
+    const result = JSON.parse(cleanedText);
+    if (result.failed === "true") {
+      throw new Error("Translation failed");
+    }
+    return result.translatedText;
+  } catch (parseError) {
+    console.error("Failed to parse model response:", parseError);
+    return cleanedText; // Fallback to raw response
   }
 }
