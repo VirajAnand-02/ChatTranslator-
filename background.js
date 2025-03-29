@@ -174,7 +174,7 @@ async function translateText(text, targetLang) {
     if (translationModel === "local" && localModelAvailable) {
       return await translateWithLocalModel(text, targetLang);
     } else {
-      return `[${targetLang}] ${text}`;
+      return `[${targetLang}] ${text}`; // temp Only for while debugging and development
       return await translateWithWebAPI(text, targetLang);
     }
   } catch (error) {
@@ -212,7 +212,7 @@ async function translateWithLocalModel(text, targetLang) {
     console.error("Local translation error:", error);
     // Fallback to web API if local translation fails
     console.log("Falling back to web API for this translation");
-    return `[${targetLang}] ${text}`;
+    return `[${targetLang}] ${text}`; // temp Only for while debugging and development
     return translateWithWebAPI(text, targetLang);
   }
 }

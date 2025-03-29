@@ -1,9 +1,14 @@
 document.addEventListener("DOMContentLoaded", function () {
-  // Add click event listener to the Get Started button
-  document
-    .getElementById("getStartedBtn")
-    .addEventListener("click", function () {
+  // Check if "getStartedBtn" exists before adding event listener
+  const getStartedBtn = document.getElementById("getStartedBtn");
+
+  if (getStartedBtn) {
+    getStartedBtn.addEventListener("click", function () {
       // Navigate to the get started page
       window.location.href = "getStarted.html";
     });
+  }
+
+  // Additional initialization if needed
+  console.log("Popup initialization completed");
 });

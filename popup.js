@@ -6,9 +6,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load saved settings
   chrome.runtime.sendMessage({ type: "GET_SETTINGS" }, (response) => {
     if (response) {
-      translationToggle.checked = response.translationEnabled;
+      // Set translation toggle if it exists
+      if (translationToggle) {
+        translationToggle.checked = response.translationEnabled;
+      }
 
-      if (response.targetLanguage) {
+      // Set target language if it exists
+      if (targetLanguageSelect && response.targetLanguage) {
         targetLanguageSelect.value = response.targetLanguage;
       }
 
@@ -27,37 +31,41 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Toggle translation on/off
-  translationToggle.addEventListener("change", () => {
-    const isEnabled = translationToggle.checked;
+  if (translationToggle) {
+    translationToggle.addEventListener("change", () => {
+      const isEnabled = translationToggle.checked;
 
-    chrome.runtime.sendMessage(
-      {
-        type: "UPDATE_SETTINGS",
-        translationEnabled: isEnabled,
-      },
-      () => {
-        // Notify content script of the change
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs[0]) {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              type: "SETTINGS_UPDATED",
-              translationEnabled: isEnabled,
-            });
-          }
-        });
-      }
-    );
-  });
+      chrome.runtime.sendMessage(
+        {
+          type: "UPDATE_SETTINGS",
+          translationEnabled: isEnabled,
+        },
+        () => {
+          // Notify content script of the change
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+              chrome.tabs.sendMessage(tabs[0].id, {
+                type: "SETTINGS_UPDATED",
+                translationEnabled: isEnabled,
+              });
+            }
+          });
+        }
+      );
+    });
+  }
 
   // Change target language
-  targetLanguageSelect.addEventListener("change", () => {
-    const language = targetLanguageSelect.value;
+  if (targetLanguageSelect) {
+    targetLanguageSelect.addEventListener("change", () => {
+      const language = targetLanguageSelect.value;
 
-    chrome.runtime.sendMessage({
-      type: "UPDATE_SETTINGS",
-      targetLanguage: language,
+      chrome.runtime.sendMessage({
+        type: "UPDATE_SETTINGS",
+        targetLanguage: language,
+      });
     });
-  });
+  }
 
   // Listen for model status updates
   chrome.runtime.onMessage.addListener((message) => {

@@ -242,32 +242,66 @@ function disconnectObservers() {
   }
 }
 
-// Process any existing messages on the page
+// Process any existing messages on the page - improved to catch more messages
 function processExistingMessages() {
   // Try multiple selectors that might match message bubbles - more comprehensive selectors
   const selectors = [
+    // WhatsApp standard message containers
     "div.message-in, div.message-out",
     ".message",
     "[role=row]",
-    ".x1iyjqo2", // Using class from provided HTML
-    // Additional selectors to catch more message types
+
+    // Classes from example
+    ".x1iyjqo2",
+    "._ap1_",
+
+    // More specific message containers
+    "div.focusable-list-item",
+    "div[tabindex='-1'].focusable-list-item",
+    "div.message-container",
     "div[data-id]",
+
+    // Text containers
     ".copyable-text",
     ".selectable-text",
-    ".message-container",
   ];
 
+  // Find the main message container first
+  const messageContainer =
+    document.querySelector("#main") || document.querySelector(".two");
+
+  if (!messageContainer) {
+    console.log("Main message container not found");
+    return;
+  }
+
+  // Get all possible message bubbles within the container
   let messageBubbles = [];
   for (const selector of selectors) {
-    const elements = document.querySelectorAll(selector);
+    const elements = messageContainer.querySelectorAll(selector);
     if (elements.length > 0) {
-      console.log(`Found messages using selector: ${selector}`);
-      messageBubbles = elements;
+      console.log(
+        `Found ${elements.length} messages using selector: ${selector}`
+      );
+      messageBubbles = Array.from(elements);
       break;
     }
   }
 
-  console.log(`Found ${messageBubbles.length} existing messages to process`);
+  // If we didn't find messages with specific selectors, try a more general approach
+  if (messageBubbles.length === 0) {
+    // Look for elements that have text content and might be messages
+    const allElements = messageContainer.querySelectorAll("*");
+    messageBubbles = Array.from(allElements).filter((el) => {
+      const text = el.textContent?.trim();
+      return text && text.length > 10 && !el.querySelector("*");
+    });
+    console.log(
+      `Found ${messageBubbles.length} possible messages using content heuristic`
+    );
+  }
+
+  console.log(`Processing ${messageBubbles.length} existing messages`);
   messageBubbles.forEach(processChatBubble);
 }
 
@@ -336,14 +370,16 @@ function processChatBubble(bubble) {
   // Mark as processed to avoid double-processing
   processedMessages.add(messageId);
 
-  // Find the text content in the bubble - improved version
-  const textElement =
-    bubble.querySelector("span.selectable-text.copyable-text") ||
-    bubble.querySelector("span._ao3e.selectable-text.copyable-text") || // Specific to example
-    bubble.querySelector(".x1iyjqo2") ||
-    findTextElement(bubble);
+  // Check if this is a document/file message without caption
+  if (isDocumentWithoutCaption(bubble)) {
+    console.log("Skipping document/file without caption");
+    return;
+  }
 
-  // Strict check for meaningful text content - if no text or empty when trimmed, skip
+  // Find the text content in the bubble - improved version with better real message detection
+  const textElement = findActualMessageText(bubble);
+
+  // Skip if no valid text element or content is found
   if (
     !textElement ||
     !textElement.textContent ||
@@ -362,9 +398,12 @@ function processChatBubble(bubble) {
     return;
   }
 
-  // Skip WhatsApp UI elements and logos
-  if (isWhatsAppUIElement(textElement, originalText)) {
-    console.log("Skipping WhatsApp UI element:", originalText);
+  // Skip WhatsApp UI elements, logos, and file names
+  if (
+    isWhatsAppUIElement(textElement, originalText) ||
+    isFileNameElement(textElement, originalText)
+  ) {
+    console.log("Skipping WhatsApp UI element or filename:", originalText);
     return;
   }
 
@@ -376,7 +415,6 @@ function processChatBubble(bubble) {
     }
   } catch (error) {
     console.error("Error checking sender name:", error);
-    // If there's an error in the check, just move forward with translation
   }
 
   // Skip messages that might already be translated
@@ -408,6 +446,222 @@ function processChatBubble(bubble) {
       }
     }
   );
+}
+
+// Find the actual message text, avoiding file names and UI elements
+function findActualMessageText(bubble) {
+  // Prioritize message text containers first
+  const messageContainers = [
+    // Main message containers
+    bubble.querySelector("span.selectable-text.copyable-text:not([title])"),
+    bubble.querySelector("div.copyable-text span.selectable-text:not([title])"),
+
+    // Handle multiline messages
+    bubble.querySelector(".copyable-area .message-text"),
+
+    // Handle message captions for media
+    bubble.querySelector(".caption"),
+    bubble.querySelector('[data-testid="caption"]'),
+  ];
+
+  // Use the first valid text container found
+  for (const container of messageContainers) {
+    if (container && container.textContent && container.textContent.trim()) {
+      return container;
+    }
+  }
+
+  // More general fallback methods
+  return (
+    bubble.querySelector("span.selectable-text.copyable-text") ||
+    bubble.querySelector("span._ao3e.selectable-text.copyable-text") ||
+    bubble.querySelector(".x1iyjqo2") ||
+    findTextElement(bubble)
+  );
+}
+
+// Check if an element is a file name element and not actual message content
+function isFileNameElement(element, text) {
+  if (!element || !text) return false;
+
+  try {
+    // Check if it's inside a document container
+    const isInDocumentContainer =
+      !!element.closest('[data-icon="document"]') ||
+      !!element.closest('[data-icon="document-refreshed-thin"]');
+
+    // Check for document file extensions
+    const hasFileExtension =
+      /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|jpg|jpeg|png|gif)$/i.test(
+        text
+      );
+
+    // Check if it's near document icons
+    const hasNearbyDocumentIcon =
+      !!element.parentElement?.querySelector('[data-icon="document"]') ||
+      !!element.parentElement?.querySelector(
+        '[data-icon="document-refreshed-thin"]'
+      );
+
+    // Check if it's in an element that has document-related classes
+    const documentClassPattern = /(document|file|attachment)/i;
+    const elementClasses =
+      typeof element.className === "string" ? element.className : "";
+    const parentClasses = element.parentElement
+      ? typeof element.parentElement.className === "string"
+        ? element.parentElement.className
+        : ""
+      : "";
+
+    const hasDocumentClass =
+      documentClassPattern.test(elementClasses) ||
+      documentClassPattern.test(parentClasses);
+
+    // If it has multiple indicators of being a filename, skip it
+    return (
+      (isInDocumentContainer && (hasFileExtension || hasNearbyDocumentIcon)) ||
+      (hasFileExtension && hasNearbyDocumentIcon) ||
+      (hasDocumentClass &&
+        (isInDocumentContainer || hasFileExtension || hasNearbyDocumentIcon))
+    );
+  } catch (error) {
+    console.error("Error checking if element is filename:", error);
+    return false;
+  }
+}
+
+// Check if this is a document/file message without any text caption
+function isDocumentWithoutCaption(bubble) {
+  try {
+    // Check for document indicators
+    const hasDocument =
+      !!bubble.querySelector('[data-icon="document"]') ||
+      !!bubble.querySelector('[data-icon="document-refreshed-thin"]') ||
+      !!bubble.querySelector('[data-testid="document-thumb"]');
+
+    // Check if there is a caption
+    const hasCaption =
+      !!bubble.querySelector(".caption") ||
+      !!bubble.querySelector('[data-testid="caption"]');
+
+    // If it has document indicators but no caption, it's a document without caption
+    return hasDocument && !hasCaption;
+  } catch (error) {
+    console.error("Error checking for document without caption:", error);
+    return false;
+  }
+}
+
+// Find the text element within a complex message bubble (improved version)
+function findTextElement(bubble) {
+  // First check for the direct WhatsApp text elements that include mentions and emojis
+  const mainTextElement = bubble.querySelector(
+    "span.selectable-text.copyable-text"
+  );
+  if (mainTextElement) {
+    return mainTextElement;
+  }
+
+  // Next, try looking for the specific structure in the example
+  const complexTextElement = bubble.querySelector(
+    "span._ao3e.selectable-text.copyable-text"
+  );
+  if (complexTextElement) {
+    return complexTextElement;
+  }
+
+  // Check if this is a media message with a caption
+  const captionSelectors = [
+    ".caption",
+    '[data-testid="caption"]',
+    "figcaption",
+    ".media-caption",
+  ];
+
+  for (const selector of captionSelectors) {
+    const caption = bubble.querySelector(selector);
+    if (caption && caption.textContent.trim()) {
+      return caption;
+    }
+  }
+
+  // Look for standard WhatsApp message content elements - improved based on the example
+  const contentSelectors = [
+    "span.selectable-text",
+    ".copyable-text span",
+    ".selectable-text",
+    "span._ao3e", // Added from example
+    "[dir=ltr]",
+    "[dir=auto]",
+    ".x1iyjqo2",
+  ];
+
+  for (const selector of contentSelectors) {
+    const elements = bubble.querySelectorAll(selector);
+    for (const el of elements) {
+      const text = el.textContent.trim();
+      // Skip very short texts, likely timestamps or status indicators
+      // But allow texts with emojis (which might appear short as text but have images)
+      if (
+        (text.length > 5 || el.querySelectorAll("img.emoji").length > 0) &&
+        (!el.querySelector("*") ||
+          el.childNodes.length === 1 ||
+          el.querySelectorAll("img.emoji").length > 0)
+      ) {
+        return el;
+      }
+    }
+  }
+
+  // Fallback: Look for any element with substantial text content
+  const allElements = bubble.querySelectorAll("*");
+  for (const el of allElements) {
+    const text = el.textContent.trim();
+    // Also consider elements with emojis as valid text elements
+    if (
+      (text.length > 5 || el.querySelectorAll("img.emoji").length > 0) &&
+      (!el.querySelector("*") || el.querySelectorAll("img.emoji").length > 0)
+    ) {
+      return el;
+    }
+  }
+
+  return null;
+}
+
+// Append the translation to the message
+function appendTranslation(element, translatedText, originalText) {
+  // Skip if they're the same or if translation failed
+  if (
+    translatedText === originalText ||
+    translatedText.includes("Failed to translate")
+  )
+    return;
+
+  // Create translation overlay
+  const translationEl = document.createElement("div");
+  translationEl.className = "translation-overlay";
+  translationEl.style.fontSize = "0.9em";
+  translationEl.style.fontStyle = "italic";
+  translationEl.style.marginTop = "4px";
+  translationEl.style.color = "#a8a8a8";
+  translationEl.style.padding = "2px 8px";
+  translationEl.style.borderLeft = "3px solid #2196f3";
+  translationEl.textContent = translatedText;
+
+  // Try to find the right parent to append to
+  const messageContainer =
+    element.closest(".copyable-text") ||
+    element.closest("[role=row]") ||
+    element.closest(".x78zum5") || // Using class from provided HTML
+    element.parentElement;
+
+  if (messageContainer) {
+    messageContainer.appendChild(translationEl);
+  } else {
+    // If can't find a proper container, append after the element itself
+    element.parentElement.insertBefore(translationEl, element.nextSibling);
+  }
 }
 
 // Function to identify WhatsApp UI elements that should not be translated
@@ -620,118 +874,6 @@ function checkForMediaContent(bubble) {
     bubble.querySelector('[data-testid="document-thumb"]');
 
   return hasImage || hasVideo || hasAudio || hasDocument;
-}
-
-// Find the text element within a complex message bubble (improved version)
-function findTextElement(bubble) {
-  // First check for the direct WhatsApp text elements that include mentions and emojis
-  const mainTextElement = bubble.querySelector(
-    "span.selectable-text.copyable-text"
-  );
-  if (mainTextElement) {
-    return mainTextElement;
-  }
-
-  // Next, try looking for the specific structure in the example
-  const complexTextElement = bubble.querySelector(
-    "span._ao3e.selectable-text.copyable-text"
-  );
-  if (complexTextElement) {
-    return complexTextElement;
-  }
-
-  // Check if this is a media message with a caption
-  const captionSelectors = [
-    ".caption",
-    '[data-testid="caption"]',
-    "figcaption",
-    ".media-caption",
-  ];
-
-  for (const selector of captionSelectors) {
-    const caption = bubble.querySelector(selector);
-    if (caption && caption.textContent.trim()) {
-      return caption;
-    }
-  }
-
-  // Look for standard WhatsApp message content elements - improved based on the example
-  const contentSelectors = [
-    "span.selectable-text",
-    ".copyable-text span",
-    ".selectable-text",
-    "span._ao3e", // Added from example
-    "[dir=ltr]",
-    "[dir=auto]",
-    ".x1iyjqo2",
-  ];
-
-  for (const selector of contentSelectors) {
-    const elements = bubble.querySelectorAll(selector);
-    for (const el of elements) {
-      const text = el.textContent.trim();
-      // Skip very short texts, likely timestamps or status indicators
-      // But allow texts with emojis (which might appear short as text but have images)
-      if (
-        (text.length > 5 || el.querySelectorAll("img.emoji").length > 0) &&
-        (!el.querySelector("*") ||
-          el.childNodes.length === 1 ||
-          el.querySelectorAll("img.emoji").length > 0)
-      ) {
-        return el;
-      }
-    }
-  }
-
-  // Fallback: Look for any element with substantial text content
-  const allElements = bubble.querySelectorAll("*");
-  for (const el of allElements) {
-    const text = el.textContent.trim();
-    // Also consider elements with emojis as valid text elements
-    if (
-      (text.length > 5 || el.querySelectorAll("img.emoji").length > 0) &&
-      (!el.querySelector("*") || el.querySelectorAll("img.emoji").length > 0)
-    ) {
-      return el;
-    }
-  }
-
-  return null;
-}
-
-// Append the translation to the message
-function appendTranslation(element, translatedText, originalText) {
-  // Skip if they're the same or if translation failed
-  if (
-    translatedText === originalText ||
-    translatedText.includes("Failed to translate")
-  )
-    return;
-
-  // Create translation overlay
-  const translationEl = document.createElement("div");
-  translationEl.className = "translation-overlay";
-  translationEl.style.fontSize = "0.9em";
-  translationEl.style.fontStyle = "italic";
-  translationEl.style.marginTop = "4px";
-  translationEl.style.color = "#a8a8a8";
-  translationEl.style.padding = "2px 8px";
-  translationEl.style.borderLeft = "3px solid #2196f3";
-  translationEl.textContent = translatedText;
-
-  // Try to find the right parent to append to
-  const messageContainer =
-    element.closest(".copyable-text") ||
-    element.closest("[role=row]") ||
-    element.closest(".x78zum5") || // Using class from provided HTML
-    element.parentElement;
-
-  if (messageContainer) {
-    messageContainer.appendChild(translationEl);
-  } else {
-    // If can't find a proper container, append after the element itself
-    element.parentElement.insertBefore(translationEl, element.nextSibling);
-  }
 }
 
 // Start the extension
