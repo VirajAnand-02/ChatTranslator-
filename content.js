@@ -401,10 +401,15 @@ function isSenderNameOrMention(text, element) {
   }
 
   // Check if the element has classes that typically indicate sender information
-  const className = element.className || "";
+  // Fix: Ensure className is properly converted to a string before using includes
+  const className =
+    typeof element.className === "string"
+      ? element.className
+      : String(element.className || "");
+
   if (
-    className.includes("data-jid") ||
-    className.includes("data-display") ||
+    className.indexOf("data-jid") !== -1 ||
+    className.indexOf("data-display") !== -1 ||
     element.getAttribute("data-jid") ||
     element.getAttribute("aria-label")?.includes("Maybe")
   ) {
