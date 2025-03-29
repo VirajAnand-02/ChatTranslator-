@@ -151,3 +151,99 @@ select {
 #forward {
   transition: transform 0.3s ease-in-out; /* Smooth rotation */
 }
+
+/* New styles for summarize feature */
+.summarize-section {
+  margin-top: 15px;
+  border-top: 1px solid #333;
+  padding-top: 15px;
+}
+
+.summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.summary-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.copy-btn {
+  background: #11a855;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.summary-text-box {
+  background-color: rgba(17, 168, 85, 0.1);
+  border: 1px solid #11a855;
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+#stopSummarizing {
+  color: #11a855;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.recording-message {
+  position: relative;
+  border-left: 3px solid #11a855 !important;
+}
+
+.recording-message::before {
+  content: "•";
+  color: #11a855;
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Floating summarize button in WhatsApp web */
+.floating-summarize-btn {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  background: #11a855;
+  color: white;
+  border: none;
+  border-radius: 50px;
+  padding: 8px 16px;
+  font-size: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floating-summarize-btn:hover {
+  background: #0d8945;
+}
+
+.floating-summarize-btn .count {
+  background: white;
+  color: #11a855;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}

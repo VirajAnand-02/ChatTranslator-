@@ -209,7 +209,7 @@ async function translateWithLocalModel(text, targetLang) {
 async function translateWithGeminiAPI(text, targetLang) {
   // Gemini API key (same as the one used previously)
   const API_KEY = "AIzaSyD1ZDwTDuyBN9PN6UeuLa67NwIiLyK79Cs";
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${API_KEY}`;
 
   try {
     console.log(`Using Gemini API to translate to ${targetLang}`);
