@@ -3,126 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <title>Get started</title>
-    <style>
-      body {
-        width: 250px;
-        padding: 10px;
-        background: #040515;
-        color: white;
-        font-family: "Poppins", sans-serif;
-        font-weight: 100;
-        font-style: normal;
-      }
 
-      .title {
-        color: white;
-        font-size: 16px;
-        font-weight: bold;
-        margin-bottom: 15px;
-        text-align: center;
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-      }
-
-      .Profile-img {
-        filter: invert();
-      }
-
-      .toggle-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-      }
-
-      .switch {
-        position: relative;
-        display: inline-block;
-        width: 40px;
-        height: 20px;
-      }
-
-      .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
-
-      .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #ccc;
-        border-radius: 20px;
-        transition: 0.4s;
-      }
-
-      .slider:before {
-        position: absolute;
-        content: "";
-        height: 16px;
-        width: 16px;
-        left: 2px;
-        bottom: 2px;
-        background-color: white;
-        border-radius: 50%;
-        transition: 0.4s;
-      }
-
-      input:checked + .slider {
-        background-color: #11a855;
-      }
-
-      input:checked + .slider:before {
-        transform: translateX(20px);
-      }
-
-      select {
-        width: 100%;
-        padding: 5px;
-        margin-top: 5px;
-        border-radius: 4px;
-        border: 1px solid #ddd;
-      }
-
-      .footer {
-        margin-top: 15px;
-        text-align: center;
-        font-size: 12px;
-      }
-
-      .footer a {
-        color: #11a855;
-        text-decoration: none;
-        font-weight: 500;
-        font-size: 10px;
-      }
-
-      .get-started-btn {
-        display: block;
-        width: 100%;
-        padding: 10px;
-        margin-top: 15px;
-        background-color: #11a855;
-        color: white;
-        text-align: center;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        border-radius: 50px;
-      }
-
-      .get-started-btn:hover {
-        background-color: #0d8945;
-      }
-    </style>
+    <link rel="stylesheet" href="globals.css" />
   </head>
   <body>
     <div class="title">
@@ -145,21 +27,22 @@
 
     <div>
       <label for="targetLanguage">Target Language:</label>
-      <select id="targetLanguage">
-        <option value="en">English</option>
-        <option value="es">Spanish</option>
-        <option value="fr">French</option>
-        <option value="de">German</option>
-        <option value="it">Italian</option>
-        <option value="pt">Portuguese</option>
-        <option value="ru">Russian</option>
-        <option value="ja">Japanese</option>
-        <option value="zh">Chinese</option>
-        <option value="hi">Hindi</option>
-      </select>
+      <div class="custom-select">
+        <select id="targetLanguage">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="ru">Russian</option>
+          <option value="ja">Japanese</option>
+          <option value="zh">Chinese</option>
+          <option value="hi">Hindi</option>
+        </select>
+        <img src="forward.png" alt="" width="10px" id="forward" />
+      </div>
     </div>
-
-    <!-- <button class="get-started-btn" id="getStartedBtn">Get Started</button> -->
 
     <div class="footer">
       <a href="options.html" target="_blank">Advanced Options</a>
