@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>WhatsApp Translator Options</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      h1 {
+        color: #2196f3;
+        text-align: center;
+      }
+
+      .option-container {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      .option-title {
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+
+      select,
+      input {
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        width: 100%;
+        max-width: 300px;
+      }
+
+      .save-button {
+        background-color: #2196f3;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .save-button:hover {
+        background-color: #0b7dda;
+      }
+
+      .status {
+        margin-top: 10px;
+        font-style: italic;
+        color: green;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WhatsApp Translator Options</h1>
+
+    <div class="option-container">
+      <div class="option-title">Translation Settings</div>
+
+      <div>
+        <label for="targetLanguage">Default Target Language:</label>
+        <select id="targetLanguage">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="ru">Russian</option>
+          <option value="ja">Japanese</option>
+          <option value="zh">Chinese</option>
+          <option value="hi">Hindi</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="option-container">
+      <div class="option-title">Translation Model</div>
+      <p>
+        This extension uses the Chrome's built-in Gemini Nano model for local
+        translation.
+      </p>
+    </div>
+
+    <div class="option-container">
+      <div class="option-title">About</div>
+      <p>
+        WhatsApp Translator is an extension that provides real-time translation
+        of messages on WhatsApp Web.
+      </p>
+      <p>Version: 1.0</p>
+    </div>
+
+    <button id="saveButton" class="save-button">Save Settings</button>
+    <div id="status" class="status">Settings saved!</div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
