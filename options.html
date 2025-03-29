@@ -56,6 +56,46 @@
         color: green;
         display: none;
       }
+
+      .model-status {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 4px;
+        background-color: #f8f8f8;
+      }
+
+      .model-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+
+      .model-available {
+        background-color: #4caf50;
+      }
+
+      .model-unavailable {
+        background-color: #f44336;
+      }
+
+      .radio-group {
+        margin: 10px 0;
+      }
+
+      .radio-option {
+        margin-bottom: 8px;
+      }
+
+      .radio-option label {
+        margin-left: 8px;
+      }
+
+      .disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
@@ -83,9 +123,47 @@
 
     <div class="option-container">
       <div class="option-title">Translation Model</div>
-      <p>
-        This extension uses the Chrome's built-in Gemini Nano model for local
-        translation.
+
+      <div class="model-status">
+        <strong>Model Status:</strong>
+        <div>
+          <span class="model-indicator" id="localModelIndicator"></span>
+          <span>Local Gemini Nano model: </span>
+          <span id="localModelStatus">Checking...</span>
+        </div>
+        <div>
+          <span>Currently active model: </span>
+          <span id="activeModelDisplay">Checking...</span>
+        </div>
+      </div>
+
+      <div class="radio-group">
+        <div class="radio-option">
+          <input
+            type="radio"
+            id="modelLocal"
+            name="translationModel"
+            value="local"
+          />
+          <label for="modelLocal"
+            >Use local Gemini Nano model (faster, works offline)</label
+          >
+        </div>
+        <div class="radio-option">
+          <input
+            type="radio"
+            id="modelWeb"
+            name="translationModel"
+            value="web"
+          />
+          <label for="modelWeb">Use web API (works on all devices)</label>
+        </div>
+      </div>
+
+      <p class="model-info">
+        The local model requires Chrome's Gemini Nano which may not be available
+        on all devices. If the local model is not available, web API will be
+        used automatically.
       </p>
     </div>
 
