@@ -343,7 +343,12 @@ function processChatBubble(bubble) {
     bubble.querySelector(".x1iyjqo2") ||
     findTextElement(bubble);
 
-  if (!textElement || !textElement.textContent.trim()) {
+  // Strict check for meaningful text content - if no text or empty when trimmed, skip
+  if (
+    !textElement ||
+    !textElement.textContent ||
+    !textElement.textContent.trim()
+  ) {
     console.log("Skipping message: No text content found");
     return;
   }
@@ -351,10 +356,27 @@ function processChatBubble(bubble) {
   // Get the text content for analysis
   let originalText = textElement.textContent.trim();
 
-  // Skip messages that are just sender names or mentions (start with @ or are likely just metadata)
-  if (isSenderNameOrMention(originalText, textElement)) {
-    console.log("Skipping message: Contains only sender name or mention");
+  // Skip if text is too short (likely not a real message)
+  if (originalText.length < 2) {
+    console.log("Skipping message: Text too short to be meaningful");
     return;
+  }
+
+  // Skip WhatsApp UI elements and logos
+  if (isWhatsAppUIElement(textElement, originalText)) {
+    console.log("Skipping WhatsApp UI element:", originalText);
+    return;
+  }
+
+  // Skip messages that are just sender names or mentions
+  try {
+    if (isSenderNameOrMention(originalText, textElement)) {
+      console.log("Skipping message: Contains only sender name or mention");
+      return;
+    }
+  } catch (error) {
+    console.error("Error checking sender name:", error);
+    // If there's an error in the check, just move forward with translation
   }
 
   // Skip messages that might already be translated
@@ -367,8 +389,8 @@ function processChatBubble(bubble) {
   console.log(
     "Processing message: ",
     originalText.substring(0, 30) + (originalText.length > 30 ? "..." : ""),
-    "Element:",
-    textElement.className
+    "Element type:",
+    textElement.tagName
   );
 
   // Request translation
@@ -388,8 +410,100 @@ function processChatBubble(bubble) {
   );
 }
 
+// Function to identify WhatsApp UI elements that should not be translated
+function isWhatsAppUIElement(element, text) {
+  // Skip elements that are clearly part of WhatsApp's UI
+  if (!element || !text) return false;
+
+  try {
+    // Check element title attribute for WhatsApp UI indicators
+    const title = element.getAttribute("title") || "";
+    if (
+      title.includes("wordmark") ||
+      title.includes("wa-") ||
+      title.includes("WhatsApp") ||
+      title === "wa-wordmark-refreshed"
+    ) {
+      return true;
+    }
+
+    // Check for specific WhatsApp UI text content
+    if (
+      text === "WhatsApp" ||
+      text === "WA" ||
+      text.includes("WhatsApp Web") ||
+      text.includes("wa-wordmark")
+    ) {
+      return true;
+    }
+
+    // Check if element is part of the WhatsApp header or UI elements
+    if (
+      element.closest("header") ||
+      element.closest('[data-testid="conversation-header"]') ||
+      element.closest("#side") ||
+      element.closest(".app-wrapper-web")
+    ) {
+      // Only consider it a UI element if it's short text in the header areas
+      if (text.length < 20) {
+        return true;
+      }
+    }
+
+    // Check if the element or its parent has typical WhatsApp UI classes
+    const parentClasses = element.parentElement
+      ? element.parentElement.className || ""
+      : "";
+    const elementClasses =
+      typeof element.className === "string" ? element.className : "";
+
+    const uiClassIndicators = [
+      "app",
+      "header",
+      "title",
+      "wordmark",
+      "_3xTHG",
+      "_1BjNO",
+      "_16cDG",
+      "landing-header",
+      "landing-wrapper",
+      "_3AjBo",
+      "_25u6T",
+    ];
+
+    for (const indicator of uiClassIndicators) {
+      if (
+        (typeof parentClasses === "string" &&
+          parentClasses.indexOf(indicator) !== -1) ||
+        (typeof elementClasses === "string" &&
+          elementClasses.indexOf(indicator) !== -1)
+      ) {
+        return true;
+      }
+    }
+
+    // Check for SVG elements (icons) or icon containers
+    if (
+      element.tagName === "SVG" ||
+      element.tagName === "PATH" ||
+      element.querySelector("svg") ||
+      element.closest("svg")
+    ) {
+      return true;
+    }
+  } catch (error) {
+    console.error("Error checking for WhatsApp UI element:", error);
+    return false;
+  }
+
+  return false;
+}
+
 // Check if text is just a sender name or mention (not actual message content)
 function isSenderNameOrMention(text, element) {
+  // If element is not provided or invalid, we can't check it
+  if (!element || !element.nodeType) return false;
+
   // Check if it's just a mention (starts with @ symbol)
   if (text.startsWith("@") && !text.includes(" ")) {
     return true;
@@ -400,36 +514,71 @@ function isSenderNameOrMention(text, element) {
     return true;
   }
 
-  // Check if the element has classes that typically indicate sender information
-  // Fix: Ensure className is properly converted to a string before using includes
-  const className =
-    typeof element.className === "string"
-      ? element.className
-      : String(element.className || "");
+  // Safely check className - handle all possible types
+  let classNameStr = "";
+  try {
+    if (typeof element.className === "string") {
+      classNameStr = element.className;
+    } else if (
+      element.className &&
+      typeof element.className.baseVal === "string"
+    ) {
+      // SVG elements have className.baseVal
+      classNameStr = element.className.baseVal;
+    } else if (
+      element.className &&
+      typeof element.className.value === "string"
+    ) {
+      // Some elements might have className.value
+      classNameStr = element.className.value;
+    } else if (element.className && element.className.toString) {
+      // If it's an object with toString, use that
+      classNameStr = element.className.toString();
+    } else if (element.getAttribute && element.getAttribute("class")) {
+      // Fallback to getAttribute("class")
+      classNameStr = element.getAttribute("class");
+    } else {
+      // Final fallback - empty string
+      classNameStr = "";
+    }
+  } catch (e) {
+    console.error("Error getting className:", e);
+    classNameStr = "";
+  }
 
+  // Check for sender info indicators in class or attributes
   if (
-    className.indexOf("data-jid") !== -1 ||
-    className.indexOf("data-display") !== -1 ||
+    classNameStr.indexOf("data-jid") !== -1 ||
+    classNameStr.indexOf("data-display") !== -1 ||
     element.getAttribute("data-jid") ||
-    element.getAttribute("aria-label")?.includes("Maybe")
+    (element.getAttribute("aria-label") &&
+      element.getAttribute("aria-label").indexOf("Maybe") !== -1)
   ) {
     return true;
   }
 
   // If parent/ancestor elements contain specific attributes related to sender info
-  const parent = element.closest(
-    '[data-jid], [data-display], [aria-label*="Maybe"]'
-  );
-  if (parent && parent !== element) {
-    return true;
+  try {
+    const parent = element.closest(
+      '[data-jid], [data-display], [aria-label*="Maybe"]'
+    );
+    if (parent && parent !== element) {
+      return true;
+    }
+  } catch (e) {
+    console.error("Error checking parent elements:", e);
   }
 
   // Look for emoji-only content with no substantial text
-  if (
-    element.querySelectorAll("img.emoji").length > 0 &&
-    text.replace(/\s+/g, "").length < 3
-  ) {
-    return true;
+  try {
+    if (
+      element.querySelectorAll("img.emoji").length > 0 &&
+      text.replace(/\s+/g, "").length < 3
+    ) {
+      return true;
+    }
+  } catch (e) {
+    console.error("Error checking emoji content:", e);
   }
 
   // Check for specific patterns in WhatsApp that indicate this is just metadata
