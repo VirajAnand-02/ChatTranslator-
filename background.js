@@ -172,6 +172,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+
+  if (message.type === "TRANSLATE_AND_SEND") {
+    // Custom language can be provided or use default
+    const useTargetLang = message.targetLanguage || targetLanguage;
+
+    translateText(message.text, useTargetLang)
+      .then((translatedText) => {
+        // Send the translated text to the active tab for injection
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            if (tabs && tabs[0]) {
+              chrome.tabs.sendMessage(
+                tabs[0].id,
+                {
+                  type: "INJECT_TRANSLATED_TEXT",
+                  translatedText: translatedText,
+                },
+                function (response) {
+                  if (response && response.success) {
+                    sendResponse({ success: true });
+                  } else {
+                    sendResponse({
+                      success: false,
+                      error: response
+                        ? response.error
+                        : "Failed to inject text",
+                    });
+                  }
+                }
+              );
+            } else {
+              sendResponse({
+                success: false,
+                error: "No active tab found",
+              });
+            }
+          }
+        );
+      })
+      .catch((error) => {
+        console.error("Translation error:", error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true; // Required for async response
+  }
 });
 
 async function translateText(text, targetLang) {

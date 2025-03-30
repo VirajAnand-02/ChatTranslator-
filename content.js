@@ -60,6 +60,72 @@ function initialize() {
   });
 }
 
+// Listen for messages from the background script
+chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+  if (message.type === "INJECT_TRANSLATED_TEXT") {
+    try {
+      injectTextIntoChatBox(message.translatedText);
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error("Error injecting text:", error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+});
+
+// Function to inject text into the WhatsApp chat input
+function injectTextIntoChatBox(text) {
+  // Get the chat input element
+  const chatInput = document.querySelector(
+    'div[contenteditable="true"][role="textbox"][data-lexical-editor="true"]'
+  );
+
+  if (!chatInput) {
+    throw new Error("Chat input not found. Are you on WhatsApp Web?");
+  }
+
+  // Focus on the input element to make it active
+  chatInput.focus();
+
+  // Clear existing text if any
+  chatInput.innerHTML = "";
+
+  // Create a paragraph element with the translated text
+  const paragraph = document.createElement("p");
+  paragraph.className = "selectable-text copyable-text x15bjb6t x1n2onr6";
+  paragraph.dir = "ltr";
+  paragraph.style.textIndent = "0px";
+  paragraph.style.marginTop = "0px";
+  paragraph.style.marginBottom = "0px";
+
+  // Create the span for the text
+  const span = document.createElement("span");
+  span.className = "selectable-text copyable-text xkrh14z";
+  span.setAttribute("data-lexical-text", "true");
+  span.textContent = text;
+
+  // Append the span to the paragraph
+  paragraph.appendChild(span);
+
+  // Insert the paragraph into the chat input
+  chatInput.appendChild(paragraph);
+
+  // Dispatch an input event to trigger any listeners
+  chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+  // Optional: Automatically send the message
+  // Uncomment the following code if you want to auto-send
+  /*
+  setTimeout(() => {
+    const sendButton = document.querySelector('button[aria-label="Send"]');
+    if (sendButton) {
+      sendButton.click();
+    }
+  }, 500);
+  */
+}
+
 // Setup improved chat change detection for WhatsApp Web SPA
 function setupChatChangeDetection() {
   // First attempt to find the chat panel

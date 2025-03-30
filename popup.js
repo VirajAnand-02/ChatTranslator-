@@ -186,4 +186,97 @@ document.addEventListener("DOMContentLoaded", () => {
       summaryText.textContent = message.summary;
     }
   });
+
+  // Initialize UI elements
+  const inputTextArea = document.getElementById("inputText");
+  const translateButton = document.getElementById("translateButton");
+  const sendButton = document.getElementById("sendButton");
+  const statusDiv = document.getElementById("status");
+
+  // Load saved language preference
+  chrome.storage.local.get(["targetLanguage"], function (result) {
+    if (result.targetLanguage) {
+      targetLanguageSelect.value = result.targetLanguage;
+    }
+  });
+
+  // Translate only button
+  translateButton.addEventListener("click", function () {
+    const text = inputTextArea.value.trim();
+    const targetLang = targetLanguageSelect.value;
+
+    if (!text) {
+      setStatus("Please enter text to translate", "error");
+      return;
+    }
+
+    setStatus("Translating...", "info");
+
+    // Save the selected language
+    chrome.storage.local.set({ targetLanguage: targetLang });
+
+    // Request translation from background script
+    chrome.runtime.sendMessage(
+      {
+        type: "TRANSLATE",
+        text: text,
+        targetLanguage: targetLang,
+      },
+      function (response) {
+        if (response && response.success) {
+          inputTextArea.value = response.translatedText;
+          setStatus("Translation complete", "success");
+        } else {
+          setStatus(
+            "Translation failed: " +
+              (response ? response.error : "Unknown error"),
+            "error"
+          );
+        }
+      }
+    );
+  });
+
+  // Translate and send button
+  sendButton.addEventListener("click", function () {
+    const text = inputTextArea.value.trim();
+    const targetLang = targetLanguageSelect.value;
+
+    if (!text) {
+      setStatus("Please enter text to translate", "error");
+      return;
+    }
+
+    setStatus("Translating and sending...", "info");
+
+    // Save the selected language
+    chrome.storage.local.set({ targetLanguage: targetLang });
+
+    // Request translation and send to active tab
+    chrome.runtime.sendMessage(
+      {
+        type: "TRANSLATE_AND_SEND",
+        text: text,
+        targetLanguage: targetLang,
+      },
+      function (response) {
+        if (response && response.success) {
+          setStatus("Message sent successfully", "success");
+          inputTextArea.value = ""; // Clear the input after sending
+        } else {
+          setStatus(
+            "Failed to send: " + (response ? response.error : "Unknown error"),
+            "error"
+          );
+        }
+      }
+    );
+  });
+
+  // Helper to set status with appropriate styling
+  function setStatus(message, type) {
+    statusDiv.textContent = message;
+    statusDiv.className = "";
+    statusDiv.classList.add(type || "info");
+  }
 });
