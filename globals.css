@@ -163,7 +163,7 @@ select {
 /* New styles for summarize feature */
 .summarize-section {
   margin-top: 15px;
-  border-top: 1px solid #333;
+  border-top: 1px solid #ffffff;
   padding-top: 15px;
 }
 
@@ -315,7 +315,7 @@ select {
 .copy-button {
   flex: 1;
   min-width: 150px;
-  background-color: #2196f3;
+  background-color: #11a855;
   color: white;
   border: none;
   border-radius: 4px;
