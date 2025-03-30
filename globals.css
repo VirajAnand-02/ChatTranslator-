@@ -212,6 +212,28 @@ select {
   transform: translateY(-50%);
 }
 
+/* Blue check indicator for recorded messages */
+.recording-message .blue-check-indicator {
+  position: absolute;
+  right: 10px;
+  bottom: 5px;
+  background-color: #2196f3;
+  color: white;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+}
+
+.recording-message .blue-check-indicator::before {
+  content: "✓";
+}
+
 /* Floating summarize button in WhatsApp web */
 .floating-summarize-btn {
   position: fixed;

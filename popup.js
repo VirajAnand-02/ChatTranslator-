@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const summaryContainer = document.getElementById("summaryContainer");
   const summaryText = document.getElementById("summaryText");
   const copySummary = document.getElementById("copySummary");
+  // This element doesn't exist in popup.html
   const modelNameElement = document.getElementById("modelName");
 
   // Track summarization state
@@ -25,17 +26,22 @@ document.addEventListener("DOMContentLoaded", () => {
         targetLanguageSelect.value = response.targetLanguage;
       }
 
-      // Update model display
-      updateModelDisplay(response.translationModel);
+      // Only update model display if response.translationModel exists
+      if (response.translationModel) {
+        updateModelDisplay(response.translationModel);
+      }
     }
   });
 
-  // Helper to update the model display
+  // Helper to update the model display - Fix the null reference error
   function updateModelDisplay(model) {
-    if (model === "local") {
-      modelNameElement.textContent = "Local Gemini Nano";
-    } else {
-      modelNameElement.textContent = "Web API";
+    // Add null check to prevent error when modelNameElement doesn't exist
+    if (modelNameElement) {
+      if (model === "local") {
+        modelNameElement.textContent = "Local Gemini Nano";
+      } else {
+        modelNameElement.textContent = "Web API";
+      }
     }
   }
 
@@ -168,10 +174,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Listen for model status updates
+  // Listen for model status updates - Add null check here too
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "MODEL_STATUS_UPDATE") {
+    if (message.type === "MODEL_STATUS_UPDATE" && modelNameElement) {
       updateModelDisplay(message.activeModel);
+    }
+
+    if (message.type === "SUMMARY_RESULT") {
+      // Display the summary
+      summaryContainer.style.display = "block";
+      summaryText.textContent = message.summary;
     }
   });
 });

@@ -271,24 +271,21 @@ function disconnectObservers() {
 
 // Process any existing messages on the page - improved to catch more messages
 function processExistingMessages() {
-  // Try multiple selectors that might match message bubbles - more comprehensive selectors
+  // Update selectors to include the specific class patterns from examples
   const selectors = [
-    // WhatsApp standard message containers
+    // Exact match for the message container in provided examples
+    "div.x9f619.x1hx0egp.x1yrsyyn.x1sxyh0.xwib8y2.xohu8s8",
+
+    // Original selectors
     "div.message-in, div.message-out",
     ".message",
     "[role=row]",
-
-    // Classes from example
     ".x1iyjqo2",
     "._ap1_",
-
-    // More specific message containers
     "div.focusable-list-item",
     "div[tabindex='-1'].focusable-list-item",
     "div.message-container",
     "div[data-id]",
-
-    // Text containers
     ".copyable-text",
     ".selectable-text",
   ];
@@ -334,8 +331,10 @@ function processExistingMessages() {
 
 // Check for new messages
 function checkForNewMessages() {
-  // Use same comprehensive selectors as processExistingMessages
+  // Add the specific class pattern from examples
   const selectors = [
+    "div.x9f619.x1hx0egp.x1yrsyyn.x1sxyh0.xwib8y2.xohu8s8",
+    // ...existing selectors...
     "div.message-in, div.message-out",
     ".message",
     "[role=row]",
@@ -570,7 +569,23 @@ function appendTranslation(element, translatedText, originalText, messageId) {
 
 // Find the actual message text, avoiding file names and UI elements
 function findActualMessageText(bubble) {
-  // First, explicitly look for the problematic class combination
+  // First, explicitly look for the pattern from the provided examples
+  const exactMatch =
+    bubble.querySelector(
+      "span._ao3e.selectable-text.copyable-text > span.selectable-text"
+    ) ||
+    bubble.querySelector("span._ao3e.selectable-text.copyable-text > span") ||
+    bubble.querySelector("span[dir='ltr']._ao3e.selectable-text.copyable-text");
+
+  if (exactMatch && exactMatch.textContent && exactMatch.textContent.trim()) {
+    console.log(
+      "Found message with exact match pattern:",
+      exactMatch.textContent.trim()
+    );
+    return exactMatch.parentElement; // Return the parent span that contains both text and translation
+  }
+
+  // Then check other patterns from examples
   const aoElement = bubble.querySelector(
     "span._ao3e.selectable-text.copyable-text"
   );
@@ -1073,9 +1088,13 @@ function cancelSummarizing() {
   isSummarizing = false;
   recordedMessages = [];
 
-  // Remove message highlights
+  // Remove message highlights and blue check indicators
   document.querySelectorAll(".recording-message").forEach((el) => {
     el.classList.remove("recording-message");
+    const checkIndicator = el.querySelector(".blue-check-indicator");
+    if (checkIndicator) {
+      checkIndicator.remove();
+    }
   });
 
   // Remove floating button
@@ -1112,10 +1131,14 @@ function finishSummarizing() {
   // Reset state
   isSummarizing = false;
 
-  // Remove message highlights with a slight delay so user can see what was included
+  // Remove message highlights and blue check indicators with a slight delay so user can see what was included
   setTimeout(() => {
     document.querySelectorAll(".recording-message").forEach((el) => {
       el.classList.remove("recording-message");
+      const checkIndicator = el.querySelector(".blue-check-indicator");
+      if (checkIndicator) {
+        checkIndicator.remove();
+      }
     });
   }, 1000);
 
@@ -1168,8 +1191,27 @@ function updateMessageCount() {
 
 // Record message for summarization
 function recordMessageForSummary(bubble) {
-  // Find the message container
-  const messageElement = findActualMessageText(bubble);
+  // Find the message container - try multiple approaches to get the message text
+  let messageElement = findActualMessageText(bubble);
+
+  // If findActualMessageText didn't work, try direct approach for the example structure
+  if (
+    !messageElement ||
+    !messageElement.textContent ||
+    !messageElement.textContent.trim()
+  ) {
+    const directContentSpan = bubble.querySelector(
+      "span._ao3e span.selectable-text"
+    );
+    if (
+      directContentSpan &&
+      directContentSpan.textContent &&
+      directContentSpan.textContent.trim()
+    ) {
+      messageElement = directContentSpan.parentElement;
+    }
+  }
+
   if (
     !messageElement ||
     !messageElement.textContent ||
@@ -1178,15 +1220,24 @@ function recordMessageForSummary(bubble) {
     return;
   }
 
-  // Get message text
-  const messageText = messageElement.textContent.trim();
-
-  // Skip if it's a system message or UI element
-  if (
-    isWhatsAppUIElement(messageElement, messageText) ||
-    isFileNameElement(messageElement, messageText)
-  ) {
-    return;
+  // Find the actual text, skipping any translation overlay that might already exist
+  let messageText = "";
+  const firstChildSpan = messageElement.querySelector("span");
+  if (firstChildSpan && firstChildSpan.textContent) {
+    messageText = firstChildSpan.textContent.trim();
+  } else {
+    // Strip any translation overlay content
+    const translationOverlay = messageElement.querySelector(
+      ".translation-overlay"
+    );
+    if (translationOverlay) {
+      translationOverlay.remove();
+      messageText = messageElement.textContent.trim();
+      // Re-add the translation overlay
+      messageElement.appendChild(translationOverlay);
+    } else {
+      messageText = messageElement.textContent.trim();
+    }
   }
 
   // Get time from the message element or use current time
@@ -1228,6 +1279,16 @@ function recordMessageForSummary(bubble) {
 
   // Mark the bubble as being recorded
   bubble.classList.add("recording-message");
+
+  // Add blue check indicator if it doesn't already exist
+  if (!bubble.querySelector(".blue-check-indicator")) {
+    const checkIndicator = document.createElement("div");
+    checkIndicator.className = "blue-check-indicator";
+
+    // Position it properly in the message bubble structure
+    const bestContainer = bubble.querySelector("._akbu") || bubble;
+    bestContainer.appendChild(checkIndicator);
+  }
 
   // Update count on button
   updateMessageCount();
