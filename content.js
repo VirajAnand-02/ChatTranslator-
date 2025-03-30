@@ -76,54 +76,113 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
 
 // Function to inject text into the WhatsApp chat input
 function injectTextIntoChatBox(text) {
-  // Get the chat input element
-  const chatInput = document.querySelector(
-    'div[contenteditable="true"][role="textbox"][data-lexical-editor="true"]'
-  );
+  try {
+    // Use the exact XPath to find the input paragraph element
+    const inputParagraph = document.evaluate(
+      "/html/body/div[1]/div/div/div[3]/div/div[4]/div/footer/div[1]/div/span/div/div[2]/div/div[3]/div[1]/p",
+      document,
+      null,
+      XPathResult.FIRST_ORDERED_NODE_TYPE,
+      null
+    ).singleNodeValue;
 
-  if (!chatInput) {
-    throw new Error("Chat input not found. Are you on WhatsApp Web?");
-  }
+    if (!inputParagraph) {
+      console.log(
+        "Chat input paragraph not found using XPath, trying alternative selectors"
+      );
 
-  // Focus on the input element to make it active
-  chatInput.focus();
+      // Fallback to other selectors if XPath doesn't work
+      const chatInput =
+        document.querySelector(
+          'div[contenteditable="true"][role="textbox"][data-lexical-editor="true"]'
+        ) || document.querySelector('[data-tab="10"][role="textbox"]');
 
-  // Clear existing text if any
-  chatInput.innerHTML = "";
+      if (!chatInput) {
+        throw new Error("Chat input not found. Are you on WhatsApp Web?");
+      }
 
-  // Create a paragraph element with the translated text
-  const paragraph = document.createElement("p");
-  paragraph.className = "selectable-text copyable-text x15bjb6t x1n2onr6";
-  paragraph.dir = "ltr";
-  paragraph.style.textIndent = "0px";
-  paragraph.style.marginTop = "0px";
-  paragraph.style.marginBottom = "0px";
+      // Focus the input
+      chatInput.focus();
 
-  // Create the span for the text
-  const span = document.createElement("span");
-  span.className = "selectable-text copyable-text xkrh14z";
-  span.setAttribute("data-lexical-text", "true");
-  span.textContent = text;
+      // Create the exact structure WhatsApp expects
+      const pElement = document.createElement("p");
+      pElement.className = "selectable-text copyable-text x15bjb6t x1n2onr6";
+      pElement.dir = "ltr";
+      pElement.style.textIndent = "0px";
+      pElement.style.marginTop = "0px";
+      pElement.style.marginBottom = "0px";
 
-  // Append the span to the paragraph
-  paragraph.appendChild(span);
+      const spanElement = document.createElement("span");
+      spanElement.className = "selectable-text copyable-text xkrh14z";
+      spanElement.setAttribute("data-lexical-text", "true");
+      spanElement.textContent = text;
 
-  // Insert the paragraph into the chat input
-  chatInput.appendChild(paragraph);
+      pElement.appendChild(spanElement);
 
-  // Dispatch an input event to trigger any listeners
-  chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+      // Clear and replace content
+      chatInput.innerHTML = "";
+      chatInput.appendChild(pElement);
 
-  // Optional: Automatically send the message
-  // Uncomment the following code if you want to auto-send
-  /*
-  setTimeout(() => {
-    const sendButton = document.querySelector('button[aria-label="Send"]');
-    if (sendButton) {
-      sendButton.click();
+      // Trigger input event
+      chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+      console.log("Text injected using fallback method");
+      return true;
     }
-  }, 500);
-  */
+
+    console.log("Found chat input using exact XPath");
+
+    // Get the span within the paragraph
+    let spanElement = inputParagraph.querySelector(
+      'span.selectable-text.copyable-text[data-lexical-text="true"]'
+    );
+
+    // If the span doesn't exist, create it with the right structure
+    if (!spanElement) {
+      console.log("Creating new span element with proper structure");
+
+      // Clear paragraph content first
+      inputParagraph.innerHTML = "";
+
+      // Create span with proper attributes
+      spanElement = document.createElement("span");
+      spanElement.className = "selectable-text copyable-text xkrh14z";
+      spanElement.setAttribute("data-lexical-text", "true");
+      inputParagraph.appendChild(spanElement);
+    }
+
+    // Set the text content of the span
+    spanElement.textContent = text;
+
+    // Focus the paragraph to place cursor at the right position
+    inputParagraph.focus();
+
+    // Trigger input event for WhatsApp to recognize the change
+    const inputEvent = new Event("input", { bubbles: true, cancelable: true });
+    inputParagraph.dispatchEvent(inputEvent);
+
+    console.log("Text successfully injected into chat input");
+    return true;
+  } catch (error) {
+    console.error("Error injecting text:", error);
+
+    // Last resort fallback - try to find any editable element and insert the text
+    try {
+      const editableElements = document.querySelectorAll(
+        '[contenteditable="true"]'
+      );
+      if (editableElements.length > 0) {
+        const lastEditable = editableElements[editableElements.length - 1];
+        lastEditable.textContent = text;
+        lastEditable.dispatchEvent(new Event("input", { bubbles: true }));
+        console.log("Text inserted using last-resort method");
+        return true;
+      }
+    } catch (fallbackError) {
+      console.error("Fallback insertion also failed:", fallbackError);
+    }
+
+    throw error;
+  }
 }
 
 // Setup improved chat change detection for WhatsApp Web SPA

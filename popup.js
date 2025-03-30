@@ -1,6 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
   const translationToggle = document.getElementById("translationToggle");
-  const targetLanguageSelect = document.getElementById("targetLanguage");
+  const mainTargetLanguageSelect =
+    document.getElementById("mainTargetLanguage");
+  const translateInputLanguageSelect = document.getElementById(
+    "translateInputLanguage"
+  );
   const summarizeButton = document.getElementById("summarizeButton");
   const summarizeStatus = document.getElementById("summarizeStatus");
   const stopSummarizing = document.getElementById("stopSummarizing");
@@ -21,10 +25,20 @@ document.addEventListener("DOMContentLoaded", () => {
         translationToggle.checked = response.translationEnabled;
       }
 
-      // Set target language if it exists
-      if (targetLanguageSelect && response.targetLanguage) {
-        targetLanguageSelect.value = response.targetLanguage;
+      // Set target language for the main settings dropdown
+      if (response.targetLanguage && mainTargetLanguageSelect) {
+        mainTargetLanguageSelect.value = response.targetLanguage;
       }
+
+      // Load the input translation dropdown from its own storage key
+      chrome.storage.local.get(["inputTranslationLanguage"], (result) => {
+        if (result.inputTranslationLanguage && translateInputLanguageSelect) {
+          translateInputLanguageSelect.value = result.inputTranslationLanguage;
+        } else if (response.targetLanguage && translateInputLanguageSelect) {
+          // Fall back to global language if no specific input language is saved
+          translateInputLanguageSelect.value = response.targetLanguage;
+        }
+      });
 
       // Only update model display if response.translationModel exists
       if (response.translationModel) {
@@ -70,15 +84,28 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Change target language
-  if (targetLanguageSelect) {
-    targetLanguageSelect.addEventListener("change", () => {
-      const language = targetLanguageSelect.value;
+  // Change target language (main dropdown) - controls global default
+  if (mainTargetLanguageSelect) {
+    mainTargetLanguageSelect.addEventListener("change", () => {
+      const language = mainTargetLanguageSelect.value;
 
+      // Update stored settings for the global target language
       chrome.runtime.sendMessage({
         type: "UPDATE_SETTINGS",
         targetLanguage: language,
       });
+
+      console.log("Global default language updated to: " + language);
+    });
+  }
+
+  // The translate input dropdown is independent but saves its state
+  if (translateInputLanguageSelect) {
+    translateInputLanguageSelect.addEventListener("change", () => {
+      const language = translateInputLanguageSelect.value;
+      // Save the input-specific language preference
+      chrome.storage.local.set({ inputTranslationLanguage: language });
+      console.log("Input translation language saved as: " + language);
     });
   }
 
@@ -190,20 +217,32 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize UI elements
   const inputTextArea = document.getElementById("inputText");
   const translateButton = document.getElementById("translateButton");
-  const sendButton = document.getElementById("sendButton");
+  const copyButton = document.getElementById("copyButton");
   const statusDiv = document.getElementById("status");
 
   // Load saved language preference
-  chrome.storage.local.get(["targetLanguage"], function (result) {
-    if (result.targetLanguage) {
-      targetLanguageSelect.value = result.targetLanguage;
+  chrome.storage.local.get(
+    ["targetLanguage", "inputTranslationLanguage"],
+    function (result) {
+      // Set the main global language dropdown
+      if (result.targetLanguage && mainTargetLanguageSelect) {
+        mainTargetLanguageSelect.value = result.targetLanguage;
+      }
+
+      // Set the input-specific language dropdown with its own preference
+      if (result.inputTranslationLanguage && translateInputLanguageSelect) {
+        translateInputLanguageSelect.value = result.inputTranslationLanguage;
+      } else if (result.targetLanguage && translateInputLanguageSelect) {
+        // If no input-specific language is saved, use the global one
+        translateInputLanguageSelect.value = result.targetLanguage;
+      }
     }
-  });
+  );
 
   // Translate only button
   translateButton.addEventListener("click", function () {
     const text = inputTextArea.value.trim();
-    const targetLang = targetLanguageSelect.value;
+    const targetLang = translateInputLanguageSelect.value;
 
     if (!text) {
       setStatus("Please enter text to translate", "error");
@@ -212,8 +251,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setStatus("Translating...", "info");
 
-    // Save the selected language
-    chrome.storage.local.set({ targetLanguage: targetLang });
+    // Don't update the global setting, just use this language for this translation
+    translateInputLanguageSelect.dataset.userSelected = "true";
 
     // Request translation from background script
     chrome.runtime.sendMessage(
@@ -237,35 +276,48 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   });
 
-  // Translate and send button
-  sendButton.addEventListener("click", function () {
+  // Replace send button with copy to clipboard functionality
+  copyButton.addEventListener("click", function () {
     const text = inputTextArea.value.trim();
-    const targetLang = targetLanguageSelect.value;
+    const targetLang = translateInputLanguageSelect.value;
 
     if (!text) {
       setStatus("Please enter text to translate", "error");
       return;
     }
 
-    setStatus("Translating and sending...", "info");
+    setStatus("Translating...", "info");
 
-    // Save the selected language
-    chrome.storage.local.set({ targetLanguage: targetLang });
+    // Save the input-specific language preference
+    chrome.storage.local.set({ inputTranslationLanguage: targetLang });
 
-    // Request translation and send to active tab
+    // Request translation from background script
     chrome.runtime.sendMessage(
       {
-        type: "TRANSLATE_AND_SEND",
+        type: "TRANSLATE",
         text: text,
         targetLanguage: targetLang,
       },
       function (response) {
         if (response && response.success) {
-          setStatus("Message sent successfully", "success");
-          inputTextArea.value = ""; // Clear the input after sending
+          // Copy the translated text to clipboard
+          navigator.clipboard
+            .writeText(response.translatedText)
+            .then(() => {
+              setStatus("Translation copied to clipboard", "success");
+              // Provide visual feedback
+              copyButton.textContent = "Copied!";
+              setTimeout(() => {
+                copyButton.textContent = "Copy to Clipboard";
+              }, 1500);
+            })
+            .catch((err) => {
+              setStatus("Failed to copy: " + err.message, "error");
+            });
         } else {
           setStatus(
-            "Failed to send: " + (response ? response.error : "Unknown error"),
+            "Translation failed: " +
+              (response ? response.error : "Unknown error"),
             "error"
           );
         }
