@@ -135,7 +135,7 @@ select {
   padding-right: 20px;
   margin-top: 10px;
 }
-#targetLanguage {
+#mainTargetLanguage {
   background: transparent;
   border: none;
   padding: 0;
@@ -147,7 +147,10 @@ select {
   width: 100%;
   padding: 8px;
 }
-#targetLanguage option {
+#mainTargetLanguage option {
+  color: black;
+}
+#translateInputLanguage option {
   color: black;
 }
 .custom-select {
@@ -239,6 +242,23 @@ select {
   content: "✓";
 }
 
+.select-container {
+  display: flex;
+  flex-direction: column;
+}
+#translateInputLanguage {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: white;
+  margin: 0;
+  -webkit-appearance: none; /* For Safari */
+  -moz-appearance: none; /* For Firefox */
+  outline: none;
+  width: 100%;
+  padding: 8px;
+}
+
 /* Floating summarize button in WhatsApp web */
 .floating-summarize-btn {
   position: fixed;
@@ -299,4 +319,8 @@ select {
   color: white;
   border: none;
   border-radius: 4px;
+}
+.random-container{
+  display: flex;
+  flex-direction: column;
 }
