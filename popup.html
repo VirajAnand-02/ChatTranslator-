@@ -17,9 +17,14 @@
         font-size: 16px;
       }
       body {
-        font-family: Arial, sans-serif;
         width: 300px;
         padding: 10px;
+      }
+      body::-webkit-scrollbar {
+        display: none; /* For Chrome, Safari, and Edge */
+      }
+      .summary-text-box::-webkit-scrollbar {
+        display: none; /* For Chrome, Safari, and Edge */
       }
       .container {
         display: flex;
