@@ -1,0 +1,166 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 142 33% 96%;
+    --foreground: 142 10% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 142 10% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 142 10% 15%;
+
+    --primary: 142 68% 49%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 142 42% 89%;
+    --secondary-foreground: 142 50% 25%;
+
+    --muted: 142 33% 96%;
+    --muted-foreground: 142 10% 40%;
+
+    --accent: 142 42% 89%;
+    --accent-foreground: 142 50% 25%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 142 33% 90%;
+    --input: 142 33% 90%;
+    --ring: 142 68% 49%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 142 33% 96%;
+    --sidebar-foreground: 142 10% 30%;
+    --sidebar-primary: 142 68% 49%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 142 42% 89%;
+    --sidebar-accent-foreground: 142 50% 25%;
+    --sidebar-border: 142 33% 90%;
+    --sidebar-ring: 142 68% 49%;
+  }
+
+  .dark {
+    --background: 142 15% 12%;
+    --foreground: 142 10% 90%;
+
+    --card: 142 15% 15%;
+    --card-foreground: 142 10% 90%;
+
+    --popover: 142 15% 15%;
+    --popover-foreground: 142 10% 90%;
+
+    --primary: 142 68% 49%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 142 30% 25%;
+    --secondary-foreground: 142 10% 90%;
+
+    --muted: 142 15% 20%;
+    --muted-foreground: 142 10% 70%;
+
+    --accent: 142 30% 25%;
+    --accent-foreground: 142 10% 90%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 142 15% 25%;
+    --input: 142 15% 25%;
+    --ring: 142 68% 49%;
+
+    --sidebar-background: 142 20% 15%;
+    --sidebar-foreground: 142 10% 85%;
+    --sidebar-primary: 142 68% 49%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 142 30% 25%;
+    --sidebar-accent-foreground: 142 10% 85%;
+    --sidebar-border: 142 15% 25%;
+    --sidebar-ring: 142 68% 49%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-whatsapp-dark to-whatsapp;
+  }
+  
+  .bg-gradient-primary {
+    @apply bg-gradient-to-r from-whatsapp-dark to-whatsapp;
+  }
+  
+  .bg-gradient-secondary {
+    @apply bg-gradient-to-r from-whatsapp-pastel to-whatsapp-light;
+  }
+  
+  .floating {
+    animation: floating 3s ease-in-out infinite;
+  }
+  
+  .bounce-in {
+    animation: bounce-in 1s ease;
+  }
+  
+  .fade-in {
+    animation: fade-in 0.5s ease-in;
+  }
+}
+
+@keyframes floating {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes bounce-in {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.chat-bubble-left {
+  @apply bg-whatsapp-lighter p-4 rounded-2xl rounded-bl-none;
+}
+
+.chat-bubble-right {
+  @apply bg-whatsapp-light text-whatsapp-teal p-4 rounded-2xl rounded-br-none;
+}
