@@ -9,8 +9,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.whatsapp.com/*"],
-      "js": ["content.js"]
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "css": ["content-styles.css"]
     }
   ],
   "action": {
