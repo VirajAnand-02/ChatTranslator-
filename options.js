@@ -6,9 +6,34 @@ document.addEventListener("DOMContentLoaded", () => {
   const localModelStatus = document.getElementById("localModelStatus");
   const activeModelDisplay = document.getElementById("activeModelDisplay");
   const modelLocalRadio = document.getElementById("modelLocal");
-  const modelWebRadio = document.getElementById("modelWeb");
+  const modelGeminiRadio = document.getElementById("modelGemini");
+  const modelVertexRadio = document.getElementById("modelVertex");
+  const vertexConfigSection = document.getElementById("vertexConfigSection");
+
+  // Vertex AI config fields
+  const vertexProjectId = document.getElementById("vertexProjectId");
+  const vertexLocation = document.getElementById("vertexLocation");
+  const vertexApiEndpoint = document.getElementById("vertexApiEndpoint");
+  const vertexModelId = document.getElementById("vertexModelId");
+  const vertexAccessToken = document.getElementById("vertexAccessToken");
 
   let isLocalModelAvailable = false;
+
+  // Show/hide Vertex AI configuration when switching models
+  document
+    .querySelectorAll('input[name="translationModel"]')
+    .forEach((radio) => {
+      radio.addEventListener("change", (event) => {
+        const selectedModel = event.target.value;
+
+        // Show Vertex AI config only when Vertex AI is selected
+        if (selectedModel === "vertex") {
+          vertexConfigSection.style.display = "block";
+        } else {
+          vertexConfigSection.style.display = "none";
+        }
+      });
+    });
 
   // Load current settings and model status
   chrome.runtime.sendMessage({ type: "GET_SETTINGS" }, (response) => {
@@ -22,6 +47,15 @@ document.addEventListener("DOMContentLoaded", () => {
         response.localModelAvailable,
         response.translationModel
       );
+
+      // Load Vertex AI settings if they exist
+      if (response.vertexConfig) {
+        vertexProjectId.value = response.vertexConfig.projectId || "";
+        vertexLocation.value = response.vertexConfig.location || "";
+        vertexApiEndpoint.value = response.vertexConfig.apiEndpoint || "";
+        vertexModelId.value = response.vertexConfig.modelId || "";
+        vertexAccessToken.value = response.vertexConfig.accessToken || "";
+      }
     }
   });
 
@@ -52,9 +86,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (activeModel === "local") {
       modelLocalRadio.checked = true;
       activeModelDisplay.textContent = "Local Gemini Nano";
+    } else if (activeModel === "vertex") {
+      modelVertexRadio.checked = true;
+      activeModelDisplay.textContent = "Vertex AI API";
+      vertexConfigSection.style.display = "block";
     } else {
-      modelWebRadio.checked = true;
-      activeModelDisplay.textContent = "Web API";
+      modelGeminiRadio.checked = true;
+      activeModelDisplay.textContent = "Gemini API";
     }
   }
 
@@ -69,7 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (selectedModel === "local" && !isLocalModelAvailable) {
           event.preventDefault();
           modelLocalRadio.checked = false;
-          modelWebRadio.checked = true;
+          modelGeminiRadio.checked = true;
           alert(
             "Local model is not available on this device. Using web API instead."
           );
@@ -88,8 +126,31 @@ document.addEventListener("DOMContentLoaded", () => {
     // Check if trying to save with local model when it's not available
     if (translationModel === "local" && !isLocalModelAvailable) {
       alert("Cannot select local model as it's not available on your device.");
-      modelWebRadio.checked = true;
+      modelGeminiRadio.checked = true;
       return;
+    }
+
+    // Gather Vertex AI settings if that model is selected
+    let vertexConfig = null;
+    if (translationModel === "vertex") {
+      vertexConfig = {
+        projectId: vertexProjectId.value,
+        location: vertexLocation.value,
+        apiEndpoint: vertexApiEndpoint.value,
+        modelId: vertexModelId.value,
+        accessToken: vertexAccessToken.value,
+      };
+
+      // Validate required Vertex AI settings
+      if (
+        !vertexConfig.projectId ||
+        !vertexConfig.location ||
+        !vertexConfig.apiEndpoint ||
+        !vertexConfig.modelId
+      ) {
+        alert("Please fill in all required Vertex AI settings.");
+        return;
+      }
     }
 
     chrome.runtime.sendMessage(
@@ -97,6 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
         type: "UPDATE_SETTINGS",
         targetLanguage: targetLanguage,
         translationModel: translationModel,
+        vertexConfig: vertexConfig,
       },
       (response) => {
         if (response && response.success) {

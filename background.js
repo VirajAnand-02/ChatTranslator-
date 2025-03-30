@@ -3,28 +3,28 @@ let targetLanguage = "en"; // Default target language
 let translationModel = "local"; // Default to local model
 let translator_session = null;
 let localModelAvailable = false;
+let vertexConfig = null; // Store Vertex AI configuration
 
 const systemPrompt = `You are a translation assistant specializing in informal, natural chat text. Your job is to translate text while maintaining:
-
 Casual Tone: Keep slang, idioms, and conversational style.
-Accuracy: Preserve the original meaning and nuances.
+Accuracy: Preserve the original meaning and nuances.style.
 Natural Flow: Make it sound like a native speaker wrote it.
-Context Awareness: Adapt to cultural differences.
+Context Awareness: Adapt to cultural differences. wrote it.
 Conciseness: No extra commentary—just a direct translation.
-
+Conciseness: No extra commentary—just a direct translation.
 ignore filler words
-
+ignore filler words
 Output must be JSON string only dont do markdown formatting:
-
+Output must be JSON string only dont do markdown formatting:
 {
   "translatedText": "translated text",
-  "failed": "true / false"
-}
+  "failed": "true / false"lated text",
+} "failed": "true / false"
 `;
 
 // Initialize settings from storage
 chrome.storage.local.get(
-  ["translationEnabled", "targetLanguage", "translationModel"],
+  ["translationEnabled", "targetLanguage", "translationModel", "vertexConfig"],
   (result) => {
     translationEnabled =
       result.translationEnabled !== undefined
@@ -32,6 +32,7 @@ chrome.storage.local.get(
         : true;
     targetLanguage = result.targetLanguage || "en";
     translationModel = result.translationModel || "local";
+    vertexConfig = result.vertexConfig || null;
   }
 );
 
@@ -59,7 +60,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 // Browser startup event
 chrome.runtime.onStartup.addListener(async () => {
   console.log("Browser started - initializing extension");
-
   // First try initializing local model
   try {
     translator_session = await ai.languageModel.create({
@@ -71,7 +71,6 @@ chrome.runtime.onStartup.addListener(async () => {
     console.log("Local model not available:", error);
     localModelAvailable = false;
   }
-
   // No need to initialize Google GenAI, we'll use direct API calls
 
   // Update model selection based on availability
@@ -82,7 +81,6 @@ chrome.runtime.onStartup.addListener(async () => {
       "Switched to web API translation due to local model unavailability"
     );
   }
-
   // Notify any open options pages about model availability
   chrome.runtime.sendMessage({
     type: "MODEL_STATUS_UPDATE",
@@ -98,7 +96,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: "Translation is disabled" });
       return true;
     }
-
     translateText(message.text, targetLanguage)
       .then((translatedText) => {
         sendResponse({ success: true, translatedText });
@@ -107,7 +104,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.error("Translation error:", error);
         sendResponse({ success: false, error: error.message });
       });
-
     return true; // Required for async response
   }
 
@@ -116,12 +112,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       translationEnabled = message.translationEnabled;
       chrome.storage.local.set({ translationEnabled });
     }
-
     if (message.hasOwnProperty("targetLanguage")) {
       targetLanguage = message.targetLanguage;
       chrome.storage.local.set({ targetLanguage });
     }
-
     if (message.hasOwnProperty("translationModel")) {
       // Only allow changing to local model if it's available
       if (message.translationModel === "local" && !localModelAvailable) {
@@ -131,11 +125,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return true;
       }
-
       translationModel = message.translationModel;
       chrome.storage.local.set({ translationModel });
     }
-
+    if (message.vertexConfig && translationModel === "vertex") {
+      vertexConfig = message.vertexConfig;
+      chrome.storage.local.set({ vertexConfig });
+    }
     sendResponse({ success: true });
     return true;
   }
@@ -146,6 +142,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       targetLanguage,
       translationModel,
       localModelAvailable,
+      vertexConfig,
     });
     return true;
   }
@@ -184,12 +181,13 @@ async function translateText(text, targetLang) {
       `Translating text (${text.length} chars) to ${targetLang}. Models: Local=${localModelAvailable}`
     );
 
-    // Check if we should use the local model and it's available
+    // Check which model to use
     if (translationModel === "local" && localModelAvailable) {
       return await translateWithLocalModel(text, targetLang);
-    }
-    // Use direct Gemini API instead of Google GenAI
-    else {
+    } else if (translationModel === "vertex") {
+      return await translateWithVertexAI(text, targetLang);
+    } else {
+      // Default to Gemini API
       return await translateWithGeminiAPI(text, targetLang);
     }
   } catch (error) {
@@ -328,6 +326,121 @@ async function translateWithWebAPI(text, targetLang) {
   }
 }
 
+// New function to translate using Vertex AI
+async function translateWithVertexAI(text, targetLang) {
+  try {
+    if (!vertexConfig) {
+      throw new Error("Vertex AI configuration is missing");
+    }
+
+    const projectId = vertexConfig.projectId;
+    const locationId = vertexConfig.location;
+    const apiEndpoint = vertexConfig.apiEndpoint;
+    const modelId = vertexConfig.modelId;
+    const accessToken = vertexConfig.accessToken;
+
+    if (!projectId || !locationId || !apiEndpoint || !modelId) {
+      throw new Error("Incomplete Vertex AI configuration");
+    }
+
+    console.log(`Using Vertex AI to translate to ${targetLang}`);
+
+    // Create request body
+    const requestBody = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Translate this text to ${targetLang}: "${text}"`,
+            },
+          ],
+        },
+      ],
+      systemInstruction: {
+        parts: [
+          {
+            text: systemPrompt,
+          },
+        ],
+      },
+      generationConfig: {
+        responseModalities: ["TEXT"],
+        temperature: 0.4,
+        maxOutputTokens: 800,
+        topP: 0.8,
+        topK: 32,
+      },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "OFF",
+        },
+      ],
+    };
+
+    // Get access token if not provided
+    let token = accessToken;
+    if (!token) {
+      // Fall back to Gemini API if no token
+      return await translateWithGeminiAPI(text, targetLang);
+    }
+
+    // Make the API request
+    const apiUrl = `https://${apiEndpoint}/v1/projects/${projectId}/locations/${locationId}/publishers/google/models/${modelId}:generateContent`;
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Vertex AI API responded with status: ${response.status}`
+      );
+    }
+
+    // Parse the response
+    const responseData = await response.json();
+
+    // Extract the translation from the response
+    if (
+      responseData.candidates &&
+      responseData.candidates[0] &&
+      responseData.candidates[0].content &&
+      responseData.candidates[0].content.parts &&
+      responseData.candidates[0].content.parts[0]
+    ) {
+      const rawResponse =
+        responseData.candidates[0].content.parts[0].text.trim();
+      return parseModelResponse(rawResponse);
+    } else {
+      throw new Error("Invalid response format from Vertex AI");
+    }
+  } catch (error) {
+    console.error("Vertex AI translation error:", error);
+    // Fall back to Gemini API
+    console.log("Falling back to Gemini API for this translation");
+    return await translateWithGeminiAPI(text, targetLang);
+  }
+}
+
 /**
  * Parse model response and handle various formats including markdown
  * @param {string} responseText - Raw text from model response
@@ -361,122 +474,125 @@ function parseModelResponse(responseText) {
   }
 }
 
-// Create a new function to summarize conversation
-async function summarizeConversation(conversation) {
+// New function to summarize using Vertex AI
+async function summarizeWithVertexAI(conversation) {
   try {
-    console.log(
-      "Summarizing conversation:",
-      conversation.substring(0, 100) + "..."
-    );
-
-    // Check if we should use the local model and it's available
-    if (translationModel === "local" && localModelAvailable) {
-      return await summarizeWithLocalModel(conversation);
-    } else {
-      return await summarizeWithGeminiAPI(conversation);
-    }
-  } catch (error) {
-    console.error("Summarization error:", error);
-    throw new Error("Failed to summarize conversation");
-  }
-}
-
-// Summarize using local model
-async function summarizeWithLocalModel(conversation) {
-  try {
-    if (!translator_session) {
-      throw new Error("Local model not initialized");
+    if (!vertexConfig) {
+      throw new Error("Vertex AI configuration is missing");
     }
 
-    // Create system prompt for summarization
-    const summarySystemPrompt = `You are a helpful chat summarization assistant. 
-    Given a conversation between two or more people, provide a concise yet comprehensive summary that captures:
-    - The main topics discussed
-    - Key decisions or conclusions reached
-    - Action items or next steps mentioned
-    Your summary should be well-structured, clear, and suitable for someone who needs to quickly understand what was discussed.`;
+    const projectId = vertexConfig.projectId;
+    const locationId = vertexConfig.location;
+    const apiEndpoint = vertexConfig.apiEndpoint;
+    const modelId = vertexConfig.modelId;
+    const accessToken = vertexConfig.accessToken;
 
-    // Use temporary session with summary prompt
-    const summary_session = await ai.languageModel.create({
-      systemPrompt: summarySystemPrompt,
-    });
+    if (!projectId || !locationId || !apiEndpoint || !modelId) {
+      throw new Error("Incomplete Vertex AI configuration");
+    }
 
-    const response = await summary_session.prompt(conversation);
-    return response.text.trim();
-  } catch (error) {
-    console.error("Local model summarization error:", error);
-    return summarizeWithGeminiAPI(conversation);
-  }
-}
-
-// Summarize using Gemini API
-async function summarizeWithGeminiAPI(conversation) {
-  const API_KEY = "AIzaSyD1ZDwTDuyBN9PN6UeuLa67NwIiLyK79Cs";
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${API_KEY}`;
-
-  try {
-    console.log("Using Gemini API for summarization");
-
-    // Create prompt for summarization
-    const prompt = `Please provide a concise but comprehensive summary of the following conversation, highlighting the main topics discussed, any decisions made, and action items:
-    
-${conversation}
-
-Summary:`;
+    console.log("Using Vertex AI for summarization");
 
     // System instruction for summarization
-    const systemInstruction = `You are a chat summarization expert. Your task is to create clear, concise summaries of conversations while preserving the key information and insights. Focus on:
+    const summarySystemInstruction = `You are a chat summarization expert. Your task is to create clear, concise summaries of conversations while preserving the key information and insights. Focus on:
     - The main topics and themes
     - Any decisions or conclusions reached
     - Action items or follow-ups needed
     - Keep your summary well-structured and easily scannable.`;
 
-    // Prepare the request body
+    // Create request body
     const requestBody = {
-      system_instruction: {
-        parts: [{ text: systemInstruction }],
-      },
       contents: [
         {
-          parts: [{ text: prompt }],
+          role: "user",
+          parts: [
+            {
+              text: `Please provide a concise but comprehensive summary of the following conversation, highlighting the main topics discussed, any decisions made, and action items:
+              
+${conversation}
+
+Summary:`,
+            },
+          ],
         },
       ],
+      systemInstruction: {
+        parts: [
+          {
+            text: summarySystemInstruction,
+          },
+        ],
+      },
       generationConfig: {
+        responseModalities: ["TEXT"],
         temperature: 0.4,
+        maxOutputTokens: 800,
         topP: 0.8,
         topK: 32,
-        maxOutputTokens: 800,
       },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "OFF",
+        },
+      ],
     };
 
+    // Get access token if not provided
+    let token = accessToken;
+    if (!token) {
+      // Fall back to Gemini API if no token
+      return await summarizeWithGeminiAPI(conversation);
+    }
+
     // Make the API request
+    const apiUrl = `https://${apiEndpoint}/v1/projects/${projectId}/locations/${locationId}/publishers/google/models/${modelId}:generateContent`;
+
     const response = await fetch(apiUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API responded with status: ${response.status}`);
+      throw new Error(
+        `Vertex AI API responded with status: ${response.status}`
+      );
     }
 
-    // Parse the JSON response
-    const data = await response.json();
+    // Parse the response
+    const responseData = await response.json();
 
     // Extract the summary from the response
     if (
-      data.candidates &&
-      data.candidates[0] &&
-      data.candidates[0].content &&
-      data.candidates[0].content.parts &&
-      data.candidates[0].content.parts[0]
+      responseData.candidates &&
+      responseData.candidates[0] &&
+      responseData.candidates[0].content &&
+      responseData.candidates[0].content.parts &&
+      responseData.candidates[0].content.parts[0]
     ) {
-      return data.candidates[0].content.parts[0].text.trim();
+      return responseData.candidates[0].content.parts[0].text.trim();
     } else {
-      throw new Error("Invalid response format from Gemini API");
+      throw new Error("Invalid response format from Vertex AI");
     }
   } catch (error) {
-    console.error("Gemini API summarization error:", error);
-    return "Failed to generate summary using Gemini API. Please try again later.";
+    console.error("Vertex AI summarization error:", error);
+    // Fall back to Gemini API
+    return await summarizeWithGeminiAPI(conversation);
   }
 }

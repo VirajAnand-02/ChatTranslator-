@@ -1,0 +1,15 @@
+# Environment variables
+.env
+
+# Node.js dependencies
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp

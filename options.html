@@ -40,7 +40,7 @@
         color: white; /* Text color */
         background: black; /* Background color */
       }
-      .radio-group{
+      .radio-group {
         margin-bottom: 16px;
       }
     </style>
@@ -119,12 +119,72 @@
           />
           <label for="modelWeb">Use web API (works on all devices)</label>
         </div>
+        <div class="radio-option">
+          <input
+            type="radio"
+            id="modelVertex"
+            name="translationModel"
+            value="vertex"
+          />
+          <label for="modelVertex">Use Vertex AI API (best quality)</label>
+        </div>
+      </div>
+
+      <!-- Add Vertex AI Configuration Section -->
+      <div
+        id="vertexConfigSection"
+        class="vertex-config mt-3 p-3 bg-gray-700 rounded-lg"
+        style="display: none"
+      >
+        <h3 class="text-sm font-bold mb-2">Vertex AI Configuration</h3>
+        <div class="mb-2">
+          <label for="vertexProjectId" class="text-xs">Project ID:</label>
+          <input
+            id="vertexProjectId"
+            type="text"
+            class="w-full bg-gray-800 border border-gray-600 rounded p-1 text-xs"
+          />
+        </div>
+        <div class="mb-2">
+          <label for="vertexLocation" class="text-xs">Location:</label>
+          <input
+            id="vertexLocation"
+            type="text"
+            class="w-full bg-gray-800 border border-gray-600 rounded p-1 text-xs"
+          />
+        </div>
+        <div class="mb-2">
+          <label for="vertexApiEndpoint" class="text-xs">API Endpoint:</label>
+          <input
+            id="vertexApiEndpoint"
+            type="text"
+            class="w-full bg-gray-800 border border-gray-600 rounded p-1 text-xs"
+          />
+        </div>
+        <div class="mb-2">
+          <label for="vertexModelId" class="text-xs">Model ID:</label>
+          <input
+            id="vertexModelId"
+            type="text"
+            class="w-full bg-gray-800 border border-gray-600 rounded p-1 text-xs"
+          />
+        </div>
+        <div class="mb-2">
+          <label for="vertexAccessToken" class="text-xs"
+            >Access Token (leave empty to request during translation):</label
+          >
+          <input
+            id="vertexAccessToken"
+            type="password"
+            class="w-full bg-gray-800 border border-gray-600 rounded p-1 text-xs"
+          />
+        </div>
       </div>
 
       <p class="model-info">
         The local model requires Chrome's Gemini Nano which may not be available
         on all devices. If the local model is not available, web API will be
-        used automatically.
+        used automatically. Vertex AI requires Google Cloud access.
       </p>
     </div>
 
