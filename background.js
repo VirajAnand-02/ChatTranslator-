@@ -96,7 +96,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: "Translation is disabled" });
       return true;
     }
-    translateText(message.text, targetLanguage)
+
+    // Use the language specified in the request, or fall back to the default
+    const useTargetLang = message.targetLanguage || targetLanguage;
+
+    translateText(message.text, useTargetLang)
       .then((translatedText) => {
         sendResponse({ success: true, translatedText });
       })

@@ -3,14 +3,15 @@
   "name": "WhatsApp Translator",
   "version": "1.0",
   "description": "Real-time chat translation for WhatsApp Web using Chrome's Gemini Nano model",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "clipboardWrite"],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.whatsapp.com/*"],
-      "js": ["content.js"]
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "css": ["content-styles.css"]
     }
   ],
   "action": {

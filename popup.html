@@ -77,9 +77,11 @@
     </div>
 
     <div>
-      <label for="targetLanguage slightlyBoldText">Target Language:</label>
+      <label for="mainTargetLanguage" class="slightlyBoldText">
+        Default Auto-Translation Language:
+      </label>
       <div class="custom-select">
-        <select id="targetLanguage">
+        <select id="mainTargetLanguage">
           <option value="en">English</option>
           <option value="es">Spanish</option>
           <option value="fr">French</option>
@@ -105,7 +107,7 @@
         id="summarizeStatus"
         style="display: none; margin-top: 8px; font-size: 12px"
       >
-        Recording messages...
+        Recording messages... ✅
         <a href="#" id="stopSummarizing">Finish & Summarize</a>
       </div>
 
@@ -130,8 +132,8 @@
       </div>
 
       <div class="form-group">
-        <label for="targetLanguage">Translate To:</label>
-        <select id="targetLanguage">
+        <label for="translateInputLanguage">Input Translation Language:</label>
+        <select id="translateInputLanguage">
           <option value="en">English</option>
           <option value="es">Spanish</option>
           <option value="fr">French</option>
@@ -149,7 +151,7 @@
 
       <div class="action-buttons">
         <button id="translateButton">Translate Only</button>
-        <button id="sendButton" class="send-button">Translate & Send</button>
+        <button id="copyButton" class="copy-button">Copy to Clipboard</button>
       </div>
 
       <div id="status"></div>

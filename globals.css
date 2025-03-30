@@ -274,3 +274,29 @@ select {
   font-size: 12px;
   font-weight: bold;
 }
+
+.action-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 8px;
+}
+
+#translateButton {
+  flex: 1;
+  min-width: 120px;
+  white-space: nowrap;
+  background-color: #444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+
+.copy-button {
+  flex: 1;
+  min-width: 150px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
