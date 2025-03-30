@@ -60,131 +60,6 @@ function initialize() {
   });
 }
 
-// Listen for messages from the background script
-chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
-  if (message.type === "INJECT_TRANSLATED_TEXT") {
-    try {
-      injectTextIntoChatBox(message.translatedText);
-      sendResponse({ success: true });
-    } catch (error) {
-      console.error("Error injecting text:", error);
-      sendResponse({ success: false, error: error.message });
-    }
-    return true;
-  }
-});
-
-// Function to inject text into the WhatsApp chat input
-function injectTextIntoChatBox(text) {
-  try {
-    // Use the exact XPath to find the input paragraph element
-    const inputParagraph = document.evaluate(
-      "/html/body/div[1]/div/div/div[3]/div/div[4]/div/footer/div[1]/div/span/div/div[2]/div/div[3]/div[1]/p",
-      document,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue;
-
-    if (!inputParagraph) {
-      console.log(
-        "Chat input paragraph not found using XPath, trying alternative selectors"
-      );
-
-      // Fallback to other selectors if XPath doesn't work
-      const chatInput =
-        document.querySelector(
-          'div[contenteditable="true"][role="textbox"][data-lexical-editor="true"]'
-        ) || document.querySelector('[data-tab="10"][role="textbox"]');
-
-      if (!chatInput) {
-        throw new Error("Chat input not found. Are you on WhatsApp Web?");
-      }
-
-      // Focus the input
-      chatInput.focus();
-
-      // Create the exact structure WhatsApp expects
-      const pElement = document.createElement("p");
-      pElement.className = "selectable-text copyable-text x15bjb6t x1n2onr6";
-      pElement.dir = "ltr";
-      pElement.style.textIndent = "0px";
-      pElement.style.marginTop = "0px";
-      pElement.style.marginBottom = "0px";
-
-      const spanElement = document.createElement("span");
-      spanElement.className = "selectable-text copyable-text xkrh14z";
-      spanElement.setAttribute("data-lexical-text", "true");
-      spanElement.textContent = text;
-
-      pElement.appendChild(spanElement);
-
-      // Clear and replace content
-      chatInput.innerHTML = "";
-      chatInput.appendChild(pElement);
-
-      // Trigger input event
-      chatInput.dispatchEvent(new Event("input", { bubbles: true }));
-      console.log("Text injected using fallback method");
-      return true;
-    }
-
-    console.log("Found chat input using exact XPath");
-
-    // Get the span within the paragraph
-    let spanElement = inputParagraph.querySelector(
-      'span.selectable-text.copyable-text[data-lexical-text="true"]'
-    );
-
-    // If the span doesn't exist, create it with the right structure
-    if (!spanElement) {
-      console.log("Creating new span element with proper structure");
-
-      // Clear paragraph content first
-      inputParagraph.innerHTML = "";
-
-      // Create span with proper attributes
-      spanElement = document.createElement("span");
-      spanElement.className = "selectable-text copyable-text xkrh14z";
-      spanElement.setAttribute("data-lexical-text", "true");
-      inputParagraph.appendChild(spanElement);
-    }
-
-    // Set the text content of the span
-    spanElement.textContent = text;
-
-    // Focus the paragraph to place cursor at the right position
-    inputParagraph.focus();
-
-    // Trigger input event for WhatsApp to recognize the change
-    const inputEvent = new Event("input", { bubbles: true, cancelable: true });
-    inputParagraph.dispatchEvent(inputEvent);
-
-    console.log("Text successfully injected into chat input");
-    return true;
-  } catch (error) {
-    console.error("Error injecting text:", error);
-
-    // Last resort fallback - try to find any editable element and insert the text
-    try {
-      const editableElements = document.querySelectorAll(
-        '[contenteditable="true"]'
-      );
-      if (editableElements.length > 0) {
-        const lastEditable = editableElements[editableElements.length - 1];
-        lastEditable.textContent = text;
-        lastEditable.dispatchEvent(new Event("input", { bubbles: true }));
-        console.log("Text inserted using last-resort method");
-        return true;
-      }
-    } catch (fallbackError) {
-      console.error("Fallback insertion also failed:", fallbackError);
-    }
-
-    throw error;
-  }
-}
-
 // Setup improved chat change detection for WhatsApp Web SPA
 function setupChatChangeDetection() {
   // First attempt to find the chat panel
@@ -1202,288 +1077,10 @@ function startSummarizing() {
   isSummarizing = true;
   recordedMessages = [];
 
-  // Process all existing messages immediately
-  processExistingMessagesForSummary();
-
   // Create floating button
   createFloatingSummarizeButton();
 
   console.log("Started recording messages for summarization");
-}
-
-// New function to specifically process existing messages for summarization
-function processExistingMessagesForSummary() {
-  console.log("Processing existing messages for summary");
-
-  // Use multiple selectors to find all possible message elements
-  const selectors = [
-    // Add exact selector for the message container example provided by user
-    "div.x9f619.x1hx0egp.x1yrsyyn.x1sxyh0.xwib8y2.xohu8s8",
-
-    // More specific selectors for message content
-    "[data-pre-plain-text]",
-    "div._ahy1.copyable-text",
-    "span._ao3e.selectable-text.copyable-text",
-    "div._akbu",
-
-    // Standard WhatsApp message containers
-    ".message-in, .message-out",
-    // Class based selectors
-    "div.focusable-list-item",
-    // Using the known patterns from WhatsApp Web
-    "div[tabindex='-1']:not([data-id='false'])",
-  ];
-
-  // Try each selector until we find messages
-  let messages = [];
-  for (const selector of selectors) {
-    const foundMessages = document.querySelectorAll(selector);
-    if (foundMessages && foundMessages.length > 0) {
-      console.log(
-        `Found ${foundMessages.length} messages with selector: ${selector}`
-      );
-      messages = Array.from(foundMessages);
-      break;
-    }
-  }
-
-  // If no messages found with specific selectors, try the broader container approach
-  if (messages.length === 0) {
-    // Get the main chat container
-    const chatContainer =
-      document.querySelector("#main .copyable-area") ||
-      document.querySelector("#main") ||
-      document.querySelector(".two");
-
-    if (chatContainer) {
-      // First try exact selectors within the container
-      const containerSelectors = [
-        "div.x9f619.x1hx0egp.x1yrsyyn.x1sxyh0.xwib8y2.xohu8s8",
-        "[data-pre-plain-text]",
-        "div._ahy1.copyable-text",
-      ];
-
-      for (const selector of containerSelectors) {
-        const foundMessages = chatContainer.querySelectorAll(selector);
-        if (foundMessages && foundMessages.length > 0) {
-          console.log(
-            `Found ${foundMessages.length} messages with container selector: ${selector}`
-          );
-          messages = Array.from(foundMessages);
-          break;
-        }
-      }
-    }
-  }
-
-  console.log(
-    `Processing ${messages.length} existing messages for summarization`
-  );
-
-  // Process each message found
-  messages.forEach((message) => {
-    recordMessageForSummary(message);
-    markMessageAsRecorded(message);
-  });
-
-  console.log(`Successfully recorded ${recordedMessages.length} messages`);
-}
-
-// Helper function to check if element is a valid message for summarization
-function isValidMessageForSummary(element) {
-  // Skip if it's a WhatsApp UI element
-  if (isWhatsAppUIElement(element, element.textContent)) {
-    return false;
-  }
-
-  // Skip very small elements
-  if (element.textContent?.trim().length < 3) {
-    return false;
-  }
-
-  // Skip elements that are likely not messages
-  if (
-    element.tagName === "BUTTON" ||
-    element.tagName === "INPUT" ||
-    element.tagName === "SVG" ||
-    element.getAttribute("role") === "button"
-  ) {
-    return false;
-  }
-
-  // Check for message content
-  const hasText = !!findActualMessageText(element);
-
-  return hasText;
-}
-
-// Function to mark a message as recorded with a checkmark
-function markMessageAsRecorded(messageElement) {
-  // Add visual class for highlighting
-  messageElement.classList.add("recording-message");
-
-  // Try to find the best target for adding the checkmark
-  const potentialTargets = [
-    // Look for the exact selectors from the example
-    messageElement.querySelector("span._ao3e.selectable-text.copyable-text"),
-    messageElement.querySelector("span.selectable-text.copyable-text"),
-    messageElement.querySelector("span._ao3e"),
-    messageElement.querySelector("div._akbu"),
-
-    // Or find any element with copyable-text class
-    messageElement.querySelector(".copyable-text"),
-
-    // If nothing else works, use the message element itself
-    messageElement,
-  ];
-
-  // Use the first valid target
-  let textContainer = null;
-  for (const target of potentialTargets) {
-    if (target) {
-      textContainer = target;
-      break;
-    }
-  }
-
-  // Only add checkmark if it doesn't already exist
-  if (
-    textContainer &&
-    !messageElement.querySelector(".message-recorded-indicator")
-  ) {
-    const indicator = document.createElement("span");
-    indicator.className = "message-recorded-indicator";
-    indicator.textContent = " ✅";
-    indicator.title = "This message is being recorded for summarization";
-
-    // Add to the container
-    textContainer.appendChild(indicator);
-
-    console.log("Added checkmark to recorded message");
-  }
-}
-
-// Record message for summarization - improved version to handle the specific structure
-function recordMessageForSummary(bubble) {
-  // Get the pre-plain-text attribute which contains sender and time info
-  const prePlainTextElement = bubble.querySelector("[data-pre-plain-text]");
-  const prePlainText = prePlainTextElement
-    ? prePlainTextElement.getAttribute("data-pre-plain-text")
-    : "";
-
-  // Look for message text in various locations
-  const textElements = [
-    // Exact match for the structure in the example
-    bubble.querySelector("span._ao3e.selectable-text.copyable-text > span"),
-    bubble.querySelector("span._ao3e.selectable-text.copyable-text"),
-    bubble.querySelector("span._ao3e"),
-
-    // General WhatsApp selectors
-    bubble.querySelector(".selectable-text.copyable-text"),
-    findActualMessageText(bubble),
-  ];
-
-  // Use the first non-empty text element
-  let messageElement = null;
-  let messageText = "";
-
-  for (const el of textElements) {
-    if (el && el.textContent?.trim()) {
-      // Skip if this is just a translation overlay
-      if (el.classList.contains("translation-overlay")) continue;
-
-      // Get text content, excluding any translation overlay
-      const overlay = el.querySelector(".translation-overlay");
-      if (overlay) {
-        // Temporarily remove overlay to get clean text
-        const parent = overlay.parentNode;
-        parent.removeChild(overlay);
-        messageText = el.textContent.trim();
-        // Re-add the overlay
-        parent.appendChild(overlay);
-      } else {
-        messageText = el.textContent.trim();
-      }
-
-      if (messageText) {
-        messageElement = el;
-        break;
-      }
-    }
-  }
-
-  if (!messageText) {
-    console.log("Could not find message text, skipping");
-    return;
-  }
-
-  // Parse pre-plain-text to get time and sender
-  let messageTime = "Unknown";
-  let senderName = "Unknown";
-
-  if (prePlainText) {
-    // Extract time from format like "[12:11 AM, 3/30/2025]"
-    const timeMatch = prePlainText.match(/\[(.*?)(?:,|\])/);
-    if (timeMatch && timeMatch[1]) {
-      messageTime = timeMatch[1].trim();
-    }
-
-    // Extract sender name from format like "[time, date] Name:"
-    const nameMatch = prePlainText.match(/\]([^:]+):/);
-    if (nameMatch && nameMatch[1]) {
-      senderName = nameMatch[1].trim();
-    }
-  } else {
-    // Try alternate methods to get time
-    const timeElement =
-      bubble.querySelector(".x1c4vz4f.x2lah0s") ||
-      bubble.querySelector(".x1rg5ohu.x16dsc37") ||
-      bubble.querySelector("[aria-hidden='true'] span");
-
-    if (timeElement) {
-      messageTime = timeElement.textContent.trim();
-    } else {
-      // Use current time as fallback
-      const now = new Date();
-      messageTime = now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    }
-
-    // Try to determine if it's an outgoing message
-    const isOutgoing =
-      bubble.classList.contains("message-out") ||
-      bubble.classList.contains("outgoing") ||
-      bubble.getAttribute("data-is-outgoing") === "true";
-
-    if (isOutgoing) {
-      senderName = "You";
-    } else {
-      // Try to find sender name from other elements
-      const senderElement =
-        bubble.querySelector("._ahxt") ||
-        bubble.querySelector("span._ahxt.x1ypdohk.xt0b8zv._ao3e");
-
-      if (senderElement) {
-        senderName = senderElement.textContent.trim();
-      }
-    }
-  }
-
-  // Add to recordedMessages
-  recordedMessages.push({
-    time: messageTime,
-    sender: senderName,
-    text: messageText,
-  });
-
-  console.log(
-    `Recorded message from ${senderName}: ${messageText.substring(0, 30)}...`
-  );
-
-  // Update count on button
-  updateMessageCount();
 }
 
 // Cancel summarization
@@ -1506,14 +1103,9 @@ function cancelSummarizing() {
   console.log("Cancelled message recording");
 }
 
-// Finish summarization and generate summary - improved with debugging
+// Finish summarization and generate summary
 function finishSummarizing() {
-  console.log("Starting finishSummarizing function");
-  console.log("Number of recorded messages:", recordedMessages.length);
-  console.log("Recorded messages:", JSON.stringify(recordedMessages, null, 2));
-
   if (recordedMessages.length === 0) {
-    console.log("No messages were recorded, sending failure message");
     chrome.runtime.sendMessage({
       type: "SUMMARY_RESULT",
       summary:
@@ -1529,30 +1121,17 @@ function finishSummarizing() {
 
   // Create conversation text
   const conversation = formatConversation(recordedMessages);
-  console.log("Formatted conversation:", conversation);
 
   // Send to background script for summarization
-  console.log("Sending SUMMARIZE_CONVERSATION message to background script");
-  chrome.runtime.sendMessage(
-    {
-      type: "SUMMARIZE_CONVERSATION",
-      conversation: conversation,
-    },
-    (response) => {
-      console.log("Received response from SUMMARIZE_CONVERSATION:", response);
-      if (chrome.runtime.lastError) {
-        console.error(
-          "Error in SUMMARIZE_CONVERSATION:",
-          chrome.runtime.lastError
-        );
-      }
-    }
-  );
+  chrome.runtime.sendMessage({
+    type: "SUMMARIZE_CONVERSATION",
+    conversation: conversation,
+  });
 
   // Reset state
   isSummarizing = false;
 
-  // Remove message highlights with a slight delay
+  // Remove message highlights and blue check indicators with a slight delay so user can see what was included
   setTimeout(() => {
     document.querySelectorAll(".recording-message").forEach((el) => {
       el.classList.remove("recording-message");
@@ -1560,31 +1139,20 @@ function finishSummarizing() {
       if (checkIndicator) {
         checkIndicator.remove();
       }
-
-      // Also remove message-recorded-indicator
-      const recordingIndicator = el.querySelector(
-        ".message-recorded-indicator"
-      );
-      if (recordingIndicator) {
-        recordingIndicator.remove();
-      }
     });
   }, 1000);
 
-  console.log("Finished finishSummarizing function");
+  console.log("Generating summary from recorded messages");
 }
 
-// Format recorded messages into a conversation - add debugging
+// Format recorded messages into a conversation
 function formatConversation(messages) {
-  console.log("Formatting conversation from", messages.length, "messages");
   let formattedText = "";
 
-  messages.forEach((msg, index) => {
-    console.log(`Message ${index}:`, msg);
+  messages.forEach((msg) => {
     formattedText += `[${msg.time}] ${msg.sender}: ${msg.text}\n`;
   });
 
-  console.log("Formatted conversation result:", formattedText);
   return formattedText;
 }
 
@@ -1729,88 +1297,6 @@ function recordMessageForSummary(bubble) {
     `Recorded message from ${senderName}: ${messageText.substring(0, 30)}...`
   );
 }
-
-// Function to mark messages that are being recorded for summarization
-function markRecordedMessage(messageElement) {
-  // Only add marker if it doesn't already exist
-  if (!messageElement.querySelector(".message-recorded-indicator")) {
-    const indicator = document.createElement("span");
-    indicator.className = "message-recorded-indicator";
-    indicator.textContent = " ✅";
-    indicator.title = "This message is being recorded for summarization";
-
-    // Find the message text container and append the indicator
-    const textContainer = messageElement.querySelector("div.copyable-text");
-    if (textContainer) {
-      textContainer.appendChild(indicator);
-    }
-  }
-}
-
-// Function to start recording messages for summarization
-function startRecordingMessages() {
-  // Set up a mutation observer to detect new messages
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (mutation.addedNodes.length) {
-        // Check if added nodes contain messages
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            const messages = node.querySelectorAll(".message-in, .message-out");
-            messages.forEach((message) => {
-              // Add to collection of messages to summarize
-              collectMessageForSummary(message);
-              // Add visual indicator
-              markRecordedMessage(message);
-            });
-          }
-        });
-      }
-    });
-  });
-
-  // Start observing the chat container
-  const chatContainer = document.querySelector("#main div.copyable-area");
-  if (chatContainer) {
-    observer.observe(chatContainer, { childList: true, subtree: true });
-  }
-
-  // Also mark existing messages in the current view
-  const existingMessages = document.querySelectorAll(
-    ".message-in, .message-out"
-  );
-  existingMessages.forEach((message) => {
-    collectMessageForSummary(message);
-    markRecordedMessage(message);
-  });
-
-  return observer;
-}
-
-// Function to collect message content for summarization
-function collectMessageForSummary(messageElement) {
-  // Extract message text, sender, timestamp, etc.
-  // Add to collection for summarization
-  // ...existing code for message collection...
-}
-
-// Listen for messages from popup to start/stop recording
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "startSummarizing") {
-    const observer = startRecordingMessages();
-    // Store the observer to stop it later
-    window.messageObserver = observer;
-    sendResponse({ success: true });
-  } else if (request.action === "stopSummarizing") {
-    // Stop the observer if it exists
-    if (window.messageObserver) {
-      window.messageObserver.disconnect();
-    }
-    // Generate and return summary
-    // ...existing code for summary generation...
-  }
-  // ...existing code...
-});
 
 // Start the extension
 window.addEventListener("load", initialize);

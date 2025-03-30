@@ -17,11 +17,36 @@ document.addEventListener("DOMContentLoaded", () => {
   // Track summarization state
   let isSummarizing = false;
 
+  // Function to ensure toggle state consistency
+  function syncToggleState() {
+    // First check local storage
+    chrome.storage.local.get(["translationEnabled"], (result) => {
+      // Get the current state from background script as well
+      chrome.runtime.sendMessage({ type: "GET_SETTINGS" }, (response) => {
+        // If either source indicates translation is disabled, ensure the toggle reflects that
+        const isEnabled = result.hasOwnProperty("translationEnabled")
+          ? result.translationEnabled
+          : response && response.hasOwnProperty("translationEnabled")
+          ? response.translationEnabled
+          : true; // Default to enabled if no setting found
+
+        // Update the UI toggle state
+        if (translationToggle) {
+          translationToggle.checked = isEnabled;
+          console.log("Toggle state synchronized:", isEnabled);
+        }
+      });
+    });
+  }
+
+  // Call this function when popup opens
+  syncToggleState();
+
   // Load saved settings
   chrome.runtime.sendMessage({ type: "GET_SETTINGS" }, (response) => {
     if (response) {
-      // Set translation toggle if it exists
-      if (translationToggle) {
+      // Set translation toggle if it exists (but we'll rely on syncToggleState for the final state)
+      if (translationToggle && response.hasOwnProperty("translationEnabled")) {
         translationToggle.checked = response.translationEnabled;
       }
 
@@ -69,7 +94,16 @@ document.addEventListener("DOMContentLoaded", () => {
           type: "UPDATE_SETTINGS",
           translationEnabled: isEnabled,
         },
-        () => {
+        (response) => {
+          // Verify the setting was properly updated
+          if (response && response.success) {
+            console.log("Translation state successfully updated:", isEnabled);
+          } else {
+            console.error("Failed to update translation state");
+            // Re-sync the state to ensure UI consistency
+            syncToggleState();
+          }
+
           // Notify content script of the change
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]) {

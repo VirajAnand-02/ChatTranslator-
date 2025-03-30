@@ -10,11 +10,23 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Initialize any other UI elements
+  // Initialize translation toggle with current state
   const translationToggle = document.getElementById("translationToggle");
   if (translationToggle) {
-    // Make sure the toggle is properly initialized (if needed)
-    translationToggle.checked = true; // Default to enabled
+    // Get state from storage to ensure consistency
+    chrome.storage.local.get(["translationEnabled"], (result) => {
+      if (result.hasOwnProperty("translationEnabled")) {
+        translationToggle.checked = result.translationEnabled;
+        console.log(
+          "Translation toggle initialized to:",
+          result.translationEnabled
+        );
+      } else {
+        // Default to enabled if not set
+        translationToggle.checked = true;
+        console.log("Translation toggle defaulted to enabled");
+      }
+    });
   }
 
   // Log completion

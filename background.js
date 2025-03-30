@@ -18,8 +18,8 @@ Output must be JSON string only dont do markdown formatting:
 Output must be JSON string only dont do markdown formatting:
 {
   "translatedText": "translated text",
-  "failed": "true / false"lated text",
-} "failed": "true / false"
+  "failed": "true / false"
+}
 `;
 
 // Add system prompt for summarization
@@ -129,7 +129,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "UPDATE_SETTINGS") {
     if (message.hasOwnProperty("translationEnabled")) {
       translationEnabled = message.translationEnabled;
-      chrome.storage.local.set({ translationEnabled });
+      chrome.storage.local.set({ translationEnabled }, () => {
+        // Check for errors
+        if (chrome.runtime.lastError) {
+          console.error(
+            "Error saving translation enabled state:",
+            chrome.runtime.lastError
+          );
+          sendResponse({
+            success: false,
+            error: chrome.runtime.lastError.message,
+          });
+        } else {
+          sendResponse({ success: true });
+        }
+      });
+      return true; // Required for async response
     }
     if (message.hasOwnProperty("targetLanguage")) {
       targetLanguage = message.targetLanguage;
@@ -156,15 +171,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Update the response for GET_SETTINGS to include success status
   if (message.type === "GET_SETTINGS") {
-    sendResponse({
-      translationEnabled,
-      targetLanguage,
-      translationModel,
-      localModelAvailable,
-      vertexConfig,
-    });
-    return true;
+    chrome.storage.local.get(
+      [
+        "translationEnabled",
+        "targetLanguage",
+        "translationModel",
+        "localModelAvailable",
+      ],
+      function (result) {
+        sendResponse({
+          success: true,
+          translationEnabled: result.hasOwnProperty("translationEnabled")
+            ? result.translationEnabled
+            : translationEnabled,
+          targetLanguage: result.targetLanguage || targetLanguage,
+          translationModel: result.translationModel || translationModel,
+          localModelAvailable: localModelAvailable,
+        });
+      }
+    );
+    return true; // Required for async response
   }
 
   if (message.type === "GET_MODEL_STATUS") {
@@ -433,19 +461,15 @@ async function summarizeWithVertexAI(conversation) {
       throw new Error("Vertex AI configuration is missing");
     }
 
-    const projectId = vertexConfig.projectId;
-    const locationId = vertexConfig.location;
-    const apiEndpoint = vertexConfig.apiEndpoint;
-    const modelId = vertexConfig.modelId;
     const accessToken = vertexConfig.accessToken;
-
-    if (!projectId || !locationId || !apiEndpoint || !modelId) {
-      throw new Error("Incomplete Vertex AI configuration");
+    if (!accessToken) {
+      // Fall back to Gemini API if no token
+      return await summarizeWithGeminiAPI(conversation);
     }
 
     console.log("Using Vertex AI for summarization");
 
-    // Create request body
+    // Create request body with updated format
     const requestBody = {
       contents: [
         {
@@ -472,8 +496,7 @@ Summary:`,
         responseModalities: ["TEXT"],
         temperature: 0.3,
         maxOutputTokens: 800,
-        topP: 0.8,
-        topK: 32,
+        topP: 0.95,
       },
       safetySettings: [
         {
@@ -495,21 +518,14 @@ Summary:`,
       ],
     };
 
-    // Get access token if not provided
-    let token = accessToken;
-    if (!token) {
-      // Fall back to Gemini API if no token
-      return await summarizeWithGeminiAPI(conversation);
-    }
-
-    // Make the API request
-    const apiUrl = `https://${apiEndpoint}/v1/projects/${projectId}/locations/${locationId}/publishers/google/models/${modelId}:generateContent`;
+    // Make the API request to the standard Vertex AI endpoint
+    const apiUrl = `https://us-central1-aiplatform.googleapis.com/v1/projects/qwiklabs-gcp-00-734d6923c832/locations/us-central1/publishers/google/models/gemini-2.0-flash-001:generateContent`;
 
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(requestBody),
     });
@@ -523,7 +539,7 @@ Summary:`,
     // Parse the response
     const responseData = await response.json();
 
-    // Extract the summary from the response
+    // Extract the summary from the updated response format
     if (
       responseData.candidates &&
       responseData.candidates[0] &&
@@ -747,26 +763,22 @@ async function translateWithWebAPI(text, targetLang) {
   }
 }
 
-// New function to translate using Vertex AI
+// New function to translate using Vertex AI with updated API format
 async function translateWithVertexAI(text, targetLang) {
   try {
     if (!vertexConfig) {
       throw new Error("Vertex AI configuration is missing");
     }
 
-    const projectId = vertexConfig.projectId;
-    const locationId = vertexConfig.location;
-    const apiEndpoint = vertexConfig.apiEndpoint;
-    const modelId = vertexConfig.modelId;
     const accessToken = vertexConfig.accessToken;
-
-    if (!projectId || !locationId || !apiEndpoint || !modelId) {
-      throw new Error("Incomplete Vertex AI configuration");
+    if (!accessToken) {
+      // Fall back to Gemini API if no token
+      return await translateWithGeminiAPI(text, targetLang);
     }
 
     console.log(`Using Vertex AI to translate to ${targetLang}`);
 
-    // Create request body
+    // Create request body with updated format
     const requestBody = {
       contents: [
         {
@@ -789,8 +801,7 @@ async function translateWithVertexAI(text, targetLang) {
         responseModalities: ["TEXT"],
         temperature: 0.4,
         maxOutputTokens: 800,
-        topP: 0.8,
-        topK: 32,
+        topP: 0.95,
       },
       safetySettings: [
         {
@@ -812,21 +823,14 @@ async function translateWithVertexAI(text, targetLang) {
       ],
     };
 
-    // Get access token if not provided
-    let token = accessToken;
-    if (!token) {
-      // Fall back to Gemini API if no token
-      return await translateWithGeminiAPI(text, targetLang);
-    }
-
-    // Make the API request
-    const apiUrl = `https://${apiEndpoint}/v1/projects/${projectId}/locations/${locationId}/publishers/google/models/${modelId}:generateContent`;
+    // Make the API request to the standard Vertex AI endpoint
+    const apiUrl = `https://us-central1-aiplatform.googleapis.com/v1/projects/qwiklabs-gcp-00-734d6923c832/locations/us-central1/publishers/google/models/gemini-2.0-flash-001:generateContent`;
 
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(requestBody),
     });
@@ -840,7 +844,7 @@ async function translateWithVertexAI(text, targetLang) {
     // Parse the response
     const responseData = await response.json();
 
-    // Extract the translation from the response
+    // Extract the translation from the updated response format
     if (
       responseData.candidates &&
       responseData.candidates[0] &&
