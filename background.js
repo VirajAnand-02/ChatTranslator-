@@ -1,6 +1,3 @@
-let translationCache;
-// We'll load this dynamically in the runtime events
-
 let translationEnabled = true;
 let targetLanguage = "en"; // Default target language
 let translationModel = "local"; // Default to local model
@@ -55,7 +52,7 @@ chrome.storage.local.get(
 );
 
 // Extension installation or update event
-chrome.runtime.onInstalled.addListener(async (details) => {
+chrome.runtime.onInstalled.addListener((details) => {
   console.log("Extension installed or updated:", details.reason);
 
   // Set default settings on first install
@@ -72,29 +69,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === "update") {
     console.log("Extension updated from version:", details.previousVersion);
     // Migrate settings or show update notification if needed
-  }
-
-  // Schedule periodic cache cleanup
-  if (details.reason === "install" || details.reason === "update") {
-    chrome.alarms.create("cacheCleanup", {
-      periodInMinutes: 60 * 24, // Once per day
-    });
-  }
-
-  // Initialize the cache manager
-  try {
-    const cacheManagerModule = await import("./cache-manager.js");
-    translationCache = cacheManagerModule.default;
-    console.log("Translation cache initialized on install/update");
-  } catch (error) {
-    console.error("Failed to initialize translation cache:", error);
-  }
-});
-
-// Handle alarms for maintenance tasks
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "cacheCleanup") {
-    translationCache.cleanupCache();
   }
 });
 
@@ -128,24 +102,6 @@ chrome.runtime.onStartup.addListener(async () => {
     localModelAvailable: localModelAvailable,
     activeModel: translationModel,
   });
-
-  // Create an alarm for periodic cache cleanup if it doesn't exist
-  chrome.alarms.get("cacheCleanup", (alarm) => {
-    if (!alarm) {
-      chrome.alarms.create("cacheCleanup", {
-        periodInMinutes: 60 * 24, // Once per day
-      });
-    }
-  });
-
-  // Initialize the cache manager
-  try {
-    const cacheManagerModule = await import("./cache-manager.js");
-    translationCache = cacheManagerModule.default;
-    console.log("Translation cache initialized successfully");
-  } catch (error) {
-    console.error("Failed to initialize translation cache:", error);
-  }
 });
 
 // Listen for messages from content script or popup
@@ -194,17 +150,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.vertexConfig && translationModel === "vertex") {
       vertexConfig = message.vertexConfig;
       chrome.storage.local.set({ vertexConfig });
-    }
-
-    // If target language changes, trigger a cache cleanup for optimization
-    if (
-      message.hasOwnProperty("targetLanguage") &&
-      message.targetLanguage !== targetLanguage
-    ) {
-      // Schedule a cleanup for the old language cache
-      setTimeout(() => {
-        translationCache.cleanupCache();
-      }, 5000);
     }
 
     sendResponse({ success: true });
@@ -330,26 +275,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // Return true to indicate we will send a response asynchronously
     return true;
-  }
-
-  // Add handler for cache management
-  if (message.type === "MANAGE_CACHE") {
-    if (message.action === "clear") {
-      translationCache
-        .clearLanguageCache(message.targetLang)
-        .then((result) => sendResponse(result))
-        .catch((error) =>
-          sendResponse({
-            success: false,
-            error: error.message,
-          })
-        );
-      return true; // Async response
-    } else if (message.action === "save") {
-      translationCache.saveDatabase();
-      sendResponse({ success: true });
-      return true;
-    }
   }
 });
 
@@ -545,7 +470,7 @@ Summary:`,
       },
       generationConfig: {
         responseModalities: ["TEXT"],
-        temperature: 0.4,
+        temperature: 0.3,
         maxOutputTokens: 800,
         topP: 0.8,
         topK: 32,
@@ -677,41 +602,15 @@ async function translateText(text, targetLang) {
       `Translating text (${text.length} chars) to ${targetLang}. Models: Local=${localModelAvailable}`
     );
 
-    // Check cache first
-    const cacheResult = await translationCache.checkCache(text, targetLang);
-
-    if (cacheResult.found) {
-      console.log("Cache hit! Using cached translation");
-      return cacheResult.translatedText;
-    }
-
-    console.log("Cache miss. Performing translation...");
-
-    // Proceed with translation
-    let translatedText;
-    let modelUsed;
-
     // Check which model to use
     if (translationModel === "local" && localModelAvailable) {
-      translatedText = await translateWithLocalModel(text, targetLang);
-      modelUsed = "local";
+      return await translateWithLocalModel(text, targetLang);
     } else if (translationModel === "vertex") {
-      translatedText = await translateWithVertexAI(text, targetLang);
-      modelUsed = "vertex";
+      return await translateWithVertexAI(text, targetLang);
     } else {
       // Default to Gemini API
-      translatedText = await translateWithGeminiAPI(text, targetLang);
-      modelUsed = "gemini";
+      return await translateWithGeminiAPI(text, targetLang);
     }
-
-    // Update cache with the new translation
-    translationCache
-      .updateCache(text, translatedText, targetLang, modelUsed)
-      .catch((err) =>
-        console.error("Failed to update translation cache:", err)
-      );
-
-    return translatedText;
   } catch (error) {
     console.error("Translation error:", error);
     // Always return something, even if translation fails
