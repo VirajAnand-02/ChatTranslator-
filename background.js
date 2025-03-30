@@ -1,3 +1,6 @@
+let translationCache;
+// We'll load this dynamically in the runtime events
+
 let translationEnabled = true;
 let targetLanguage = "en"; // Default target language
 let translationModel = "local"; // Default to local model
@@ -22,6 +25,21 @@ Output must be JSON string only dont do markdown formatting:
 } "failed": "true / false"
 `;
 
+// Add system prompt for summarization
+const summarySystemPrompt = `You are a conversation summarization assistant specialized in analyzing WhatsApp chats.
+Your goal is to provide concise, structured summaries of conversations that capture:
+1. Key topics and main discussion points
+2. Important decisions, agreements, or action items
+3. Time-sensitive information like deadlines or scheduled events
+4. Questions that need answers or follow-ups
+
+Format your summary in a clean, readable structure with appropriate headings.
+Be factual and objective - include only what was actually discussed.
+Avoid adding your own commentary or suggestions.
+Focus on extracting what would be most valuable for someone who needs to quickly understand what happened in the conversation.
+
+Output must be plain text with appropriate line breaks and structure.`;
+
 // Initialize settings from storage
 chrome.storage.local.get(
   ["translationEnabled", "targetLanguage", "translationModel", "vertexConfig"],
@@ -37,7 +55,7 @@ chrome.storage.local.get(
 );
 
 // Extension installation or update event
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.log("Extension installed or updated:", details.reason);
 
   // Set default settings on first install
@@ -54,6 +72,29 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "update") {
     console.log("Extension updated from version:", details.previousVersion);
     // Migrate settings or show update notification if needed
+  }
+
+  // Schedule periodic cache cleanup
+  if (details.reason === "install" || details.reason === "update") {
+    chrome.alarms.create("cacheCleanup", {
+      periodInMinutes: 60 * 24, // Once per day
+    });
+  }
+
+  // Initialize the cache manager
+  try {
+    const cacheManagerModule = await import("./cache-manager.js");
+    translationCache = cacheManagerModule.default;
+    console.log("Translation cache initialized on install/update");
+  } catch (error) {
+    console.error("Failed to initialize translation cache:", error);
+  }
+});
+
+// Handle alarms for maintenance tasks
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "cacheCleanup") {
+    translationCache.cleanupCache();
   }
 });
 
@@ -87,6 +128,24 @@ chrome.runtime.onStartup.addListener(async () => {
     localModelAvailable: localModelAvailable,
     activeModel: translationModel,
   });
+
+  // Create an alarm for periodic cache cleanup if it doesn't exist
+  chrome.alarms.get("cacheCleanup", (alarm) => {
+    if (!alarm) {
+      chrome.alarms.create("cacheCleanup", {
+        periodInMinutes: 60 * 24, // Once per day
+      });
+    }
+  });
+
+  // Initialize the cache manager
+  try {
+    const cacheManagerModule = await import("./cache-manager.js");
+    translationCache = cacheManagerModule.default;
+    console.log("Translation cache initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize translation cache:", error);
+  }
 });
 
 // Listen for messages from content script or popup
@@ -136,6 +195,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       vertexConfig = message.vertexConfig;
       chrome.storage.local.set({ vertexConfig });
     }
+
+    // If target language changes, trigger a cache cleanup for optimization
+    if (
+      message.hasOwnProperty("targetLanguage") &&
+      message.targetLanguage !== targetLanguage
+    ) {
+      // Schedule a cleanup for the old language cache
+      setTimeout(() => {
+        translationCache.cleanupCache();
+      }, 5000);
+    }
+
     sendResponse({ success: true });
     return true;
   }
@@ -222,7 +293,382 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true; // Required for async response
   }
+
+  // Handle summarize conversation request
+  if (message.type === "SUMMARIZE_CONVERSATION") {
+    console.log("Background received SUMMARIZE_CONVERSATION request:", message);
+
+    // Extract the conversation text
+    const conversation = message.conversation;
+    console.log("Conversation to summarize:", conversation);
+
+    // Generate summary using an API or local processing
+    generateSummary(conversation)
+      .then((summary) => {
+        console.log("Generated summary:", summary);
+
+        // Send the summary back to the popup
+        chrome.runtime.sendMessage({
+          type: "SUMMARY_RESULT",
+          summary: summary,
+        });
+
+        // Also send response directly
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.error("Error generating summary:", error);
+
+        // Send error message back to popup
+        chrome.runtime.sendMessage({
+          type: "SUMMARY_RESULT",
+          summary: "Error generating summary: " + error.message,
+        });
+
+        sendResponse({ success: false, error: error.message });
+      });
+
+    // Return true to indicate we will send a response asynchronously
+    return true;
+  }
+
+  // Add handler for cache management
+  if (message.type === "MANAGE_CACHE") {
+    if (message.action === "clear") {
+      translationCache
+        .clearLanguageCache(message.targetLang)
+        .then((result) => sendResponse(result))
+        .catch((error) =>
+          sendResponse({
+            success: false,
+            error: error.message,
+          })
+        );
+      return true; // Async response
+    } else if (message.action === "save") {
+      translationCache.saveDatabase();
+      sendResponse({ success: true });
+      return true;
+    }
+  }
 });
+
+// Update summarizeConversation to choose the appropriate method based on model
+async function summarizeConversation(conversation) {
+  console.log("Starting conversation summarization");
+
+  try {
+    // Based on model settings, choose the appropriate summarization method
+    if (translationModel === "local" && localModelAvailable) {
+      console.log("Using Local Gemini model for summarization");
+      return await summarizeWithLocalModel(conversation);
+    } else if (translationModel === "vertex" && vertexConfig) {
+      console.log("Using Vertex AI for summarization");
+      return await summarizeWithVertexAI(conversation);
+    } else {
+      console.log("Using Gemini API for summarization");
+      return await summarizeWithGeminiAPI(conversation);
+    }
+  } catch (error) {
+    console.error("Summarization error:", error);
+    // Fallback to basic summary if AI summarization fails
+    console.log("Falling back to basic summary generation");
+    return await generateBasicSummary(conversation);
+  }
+}
+
+// Function to summarize using local Gemini model
+async function summarizeWithLocalModel(conversation) {
+  try {
+    // Check if local model is available
+    if (!translator_session) {
+      throw new Error("Local model not initialized");
+    }
+
+    console.log("Using local Gemini model for summarization");
+
+    // Create a summarization prompt
+    const summarizationPrompt = `Please provide a concise summary of this conversation:
+      
+${conversation}
+
+Focus on the main topics, any decisions made, and action items.`;
+
+    // Use the local model for summarization
+    const response = await translator_session.prompt(summarizationPrompt, {
+      systemPrompt: summarySystemPrompt,
+    });
+
+    if (!response || !response.text) {
+      throw new Error("Empty response from local model");
+    }
+
+    return response.text.trim();
+  } catch (error) {
+    console.error("Local model summarization error:", error);
+    // Fall back to Gemini API
+    console.log("Falling back to Gemini API for summarization");
+    return await summarizeWithGeminiAPI(conversation);
+  }
+}
+
+// Function to summarize using Gemini API
+async function summarizeWithGeminiAPI(conversation) {
+  // Gemini API key (same as the one used for translation)
+  const API_KEY = "AIzaSyD1ZDwTDuyBN9PN6UeuLa67NwIiLyK79Cs";
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${API_KEY}`;
+
+  try {
+    console.log("Using Gemini API for summarization");
+
+    // Create prompt for summarization
+    const prompt = `Please provide a concise summary of this conversation:
+      
+${conversation}
+
+Focus on the main topics, any decisions made, and action items.`;
+
+    // Prepare the request body
+    const requestBody = {
+      system_instruction: {
+        parts: [
+          {
+            text: summarySystemPrompt,
+          },
+        ],
+      },
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.3,
+        topP: 0.8,
+        topK: 40,
+        maxOutputTokens: 800,
+      },
+    };
+
+    // Make the API request
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API responded with status: ${response.status}`);
+    }
+
+    // Parse the JSON response
+    const data = await response.json();
+
+    // Extract the summary from the response
+    if (
+      data.candidates &&
+      data.candidates[0] &&
+      data.candidates[0].content &&
+      data.candidates[0].content.parts &&
+      data.candidates[0].content.parts[0]
+    ) {
+      return data.candidates[0].content.parts[0].text.trim();
+    } else {
+      throw new Error("Invalid response format from Gemini API");
+    }
+  } catch (error) {
+    console.error("Gemini API summarization error:", error);
+    // Fall back to web API
+    console.log("Falling back to web API for summarization");
+    return await summarizeWithWebAPI(conversation);
+  }
+}
+
+// Function to summarize using a web API
+async function summarizeWithWebAPI(conversation) {
+  try {
+    // Since there's no free, reliable summarization API available like there is for translation,
+    // we'll fall back to our basic summary generator
+    console.log(
+      "No appropriate web API available for summarization, using basic summary"
+    );
+    return await generateBasicSummary(conversation);
+  } catch (error) {
+    console.error("Web API summarization error:", error);
+    return "Could not generate summary: " + error.message;
+  }
+}
+
+// Enhanced version of Vertex AI summarization with improved prompt
+async function summarizeWithVertexAI(conversation) {
+  try {
+    if (!vertexConfig) {
+      throw new Error("Vertex AI configuration is missing");
+    }
+
+    const projectId = vertexConfig.projectId;
+    const locationId = vertexConfig.location;
+    const apiEndpoint = vertexConfig.apiEndpoint;
+    const modelId = vertexConfig.modelId;
+    const accessToken = vertexConfig.accessToken;
+
+    if (!projectId || !locationId || !apiEndpoint || !modelId) {
+      throw new Error("Incomplete Vertex AI configuration");
+    }
+
+    console.log("Using Vertex AI for summarization");
+
+    // Create request body
+    const requestBody = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Please provide a concise but comprehensive summary of the following WhatsApp conversation, highlighting the main topics discussed, any decisions made, and action items:
+              
+${conversation}
+
+Summary:`,
+            },
+          ],
+        },
+      ],
+      systemInstruction: {
+        parts: [
+          {
+            text: summarySystemPrompt,
+          },
+        ],
+      },
+      generationConfig: {
+        responseModalities: ["TEXT"],
+        temperature: 0.4,
+        maxOutputTokens: 800,
+        topP: 0.8,
+        topK: 32,
+      },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "OFF",
+        },
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "OFF",
+        },
+      ],
+    };
+
+    // Get access token if not provided
+    let token = accessToken;
+    if (!token) {
+      // Fall back to Gemini API if no token
+      return await summarizeWithGeminiAPI(conversation);
+    }
+
+    // Make the API request
+    const apiUrl = `https://${apiEndpoint}/v1/projects/${projectId}/locations/${locationId}/publishers/google/models/${modelId}:generateContent`;
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Vertex AI API responded with status: ${response.status}`
+      );
+    }
+
+    // Parse the response
+    const responseData = await response.json();
+
+    // Extract the summary from the response
+    if (
+      responseData.candidates &&
+      responseData.candidates[0] &&
+      responseData.candidates[0].content &&
+      responseData.candidates[0].content.parts &&
+      responseData.candidates[0].content.parts[0]
+    ) {
+      return responseData.candidates[0].content.parts[0].text.trim();
+    } else {
+      throw new Error("Invalid response format from Vertex AI");
+    }
+  } catch (error) {
+    console.error("Vertex AI summarization error:", error);
+    // Fall back to Gemini API
+    return await summarizeWithGeminiAPI(conversation);
+  }
+}
+
+// Rename the original generateSummary function to be more descriptive
+async function generateBasicSummary(conversation) {
+  console.log("Generating basic statistical summary");
+
+  try {
+    // Split the conversation into lines
+    const lines = conversation.split("\n").filter((line) => line.trim());
+
+    // Count messages per participant
+    const participants = {};
+    let totalMessages = 0;
+
+    for (const line of lines) {
+      const match = line.match(/\[.*?\] (.*?):/);
+      if (match && match[1]) {
+        const participant = match[1].trim();
+        participants[participant] = (participants[participant] || 0) + 1;
+        totalMessages++;
+      }
+    }
+
+    // Create summary text
+    let summary = `Conversation Summary (${totalMessages} messages)\n\n`;
+    summary += "Participants:\n";
+
+    for (const [name, count] of Object.entries(participants)) {
+      const percentage = ((count / totalMessages) * 100).toFixed(1);
+      summary += `- ${name}: ${count} messages (${percentage}%)\n`;
+    }
+
+    summary += "\nHighlights:\n";
+
+    // Add a few sample messages (up to 3)
+    const sampleCount = Math.min(3, lines.length);
+    for (let i = 0; i < sampleCount; i++) {
+      const randomIndex = Math.floor(Math.random() * lines.length);
+      summary += `- ${lines[randomIndex]}\n`;
+    }
+
+    console.log("Generated basic summary");
+    return summary;
+  } catch (error) {
+    console.error("Error in generateBasicSummary:", error);
+    return "Failed to generate summary due to an error: " + error.message;
+  }
+}
+
+// For compatibility, keep the original function name with updated implementation
+async function generateSummary(conversation) {
+  // Now uses the AI-based summarization by default
+  return await summarizeConversation(conversation);
+}
 
 async function translateText(text, targetLang) {
   try {
@@ -231,15 +677,41 @@ async function translateText(text, targetLang) {
       `Translating text (${text.length} chars) to ${targetLang}. Models: Local=${localModelAvailable}`
     );
 
+    // Check cache first
+    const cacheResult = await translationCache.checkCache(text, targetLang);
+
+    if (cacheResult.found) {
+      console.log("Cache hit! Using cached translation");
+      return cacheResult.translatedText;
+    }
+
+    console.log("Cache miss. Performing translation...");
+
+    // Proceed with translation
+    let translatedText;
+    let modelUsed;
+
     // Check which model to use
     if (translationModel === "local" && localModelAvailable) {
-      return await translateWithLocalModel(text, targetLang);
+      translatedText = await translateWithLocalModel(text, targetLang);
+      modelUsed = "local";
     } else if (translationModel === "vertex") {
-      return await translateWithVertexAI(text, targetLang);
+      translatedText = await translateWithVertexAI(text, targetLang);
+      modelUsed = "vertex";
     } else {
       // Default to Gemini API
-      return await translateWithGeminiAPI(text, targetLang);
+      translatedText = await translateWithGeminiAPI(text, targetLang);
+      modelUsed = "gemini";
     }
+
+    // Update cache with the new translation
+    translationCache
+      .updateCache(text, translatedText, targetLang, modelUsed)
+      .catch((err) =>
+        console.error("Failed to update translation cache:", err)
+      );
+
+    return translatedText;
   } catch (error) {
     console.error("Translation error:", error);
     // Always return something, even if translation fails
@@ -521,128 +993,5 @@ function parseModelResponse(responseText) {
   } catch (parseError) {
     console.error("Failed to parse model response:", parseError);
     return cleanedText; // Fallback to raw response
-  }
-}
-
-// New function to summarize using Vertex AI
-async function summarizeWithVertexAI(conversation) {
-  try {
-    if (!vertexConfig) {
-      throw new Error("Vertex AI configuration is missing");
-    }
-
-    const projectId = vertexConfig.projectId;
-    const locationId = vertexConfig.location;
-    const apiEndpoint = vertexConfig.apiEndpoint;
-    const modelId = vertexConfig.modelId;
-    const accessToken = vertexConfig.accessToken;
-
-    if (!projectId || !locationId || !apiEndpoint || !modelId) {
-      throw new Error("Incomplete Vertex AI configuration");
-    }
-
-    console.log("Using Vertex AI for summarization");
-
-    // System instruction for summarization
-    const summarySystemInstruction = `You are a chat summarization expert. Your task is to create clear, concise summaries of conversations while preserving the key information and insights. Focus on:
-    - The main topics and themes
-    - Any decisions or conclusions reached
-    - Action items or follow-ups needed
-    - Keep your summary well-structured and easily scannable.`;
-
-    // Create request body
-    const requestBody = {
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `Please provide a concise but comprehensive summary of the following conversation, highlighting the main topics discussed, any decisions made, and action items:
-              
-${conversation}
-
-Summary:`,
-            },
-          ],
-        },
-      ],
-      systemInstruction: {
-        parts: [
-          {
-            text: summarySystemInstruction,
-          },
-        ],
-      },
-      generationConfig: {
-        responseModalities: ["TEXT"],
-        temperature: 0.4,
-        maxOutputTokens: 800,
-        topP: 0.8,
-        topK: 32,
-      },
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "OFF",
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "OFF",
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "OFF",
-        },
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "OFF",
-        },
-      ],
-    };
-
-    // Get access token if not provided
-    let token = accessToken;
-    if (!token) {
-      // Fall back to Gemini API if no token
-      return await summarizeWithGeminiAPI(conversation);
-    }
-
-    // Make the API request
-    const apiUrl = `https://${apiEndpoint}/v1/projects/${projectId}/locations/${locationId}/publishers/google/models/${modelId}:generateContent`;
-
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Vertex AI API responded with status: ${response.status}`
-      );
-    }
-
-    // Parse the response
-    const responseData = await response.json();
-
-    // Extract the summary from the response
-    if (
-      responseData.candidates &&
-      responseData.candidates[0] &&
-      responseData.candidates[0].content &&
-      responseData.candidates[0].content.parts &&
-      responseData.candidates[0].content.parts[0]
-    ) {
-      return responseData.candidates[0].content.parts[0].text.trim();
-    } else {
-      throw new Error("Invalid response format from Vertex AI");
-    }
-  } catch (error) {
-    console.error("Vertex AI summarization error:", error);
-    // Fall back to Gemini API
-    return await summarizeWithGeminiAPI(conversation);
   }
 }

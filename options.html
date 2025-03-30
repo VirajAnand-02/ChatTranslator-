@@ -191,6 +191,32 @@
     <div
       class="option-container w-full p-4 px-5 border-2 border-gray-600 rounded-lg"
     >
+      <div class="option-title font-bold">Translation Cache</div>
+
+      <div class="cache-stats p-3 bg-gray-700 rounded-lg my-3">
+        <h3>Cache Statistics</h3>
+        <div id="cacheStats">Loading...</div>
+      </div>
+
+      <div class="flex gap-3 mt-3">
+        <button
+          id="clearCache"
+          class="bg-red-600 hover:bg-red-700 p-2 rounded-lg"
+        >
+          Clear Translation Cache
+        </button>
+        <button
+          id="exportCache"
+          class="bg-blue-600 hover:bg-blue-700 p-2 rounded-lg"
+        >
+          Export Cache
+        </button>
+      </div>
+    </div>
+
+    <div
+      class="option-container w-full p-4 px-5 border-2 border-gray-600 rounded-lg"
+    >
       <div class="option-title font-bold">About</div>
       <p>
         WhatsApp Translator is an extension that provides real-time translation
@@ -208,5 +234,7 @@
     <div id="status" class="status">Settings saved!</div>
 
     <script src="options.js"></script>
+    <script src="cache-manager.js" type="module"></script>
+    <script src="options-cache.js" type="module"></script>
   </body>
 </html>

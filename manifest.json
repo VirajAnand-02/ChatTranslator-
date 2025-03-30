@@ -2,10 +2,16 @@
   "manifest_version": 3,
   "name": "WhatsApp Translator",
   "version": "1.0",
-  "description": "Real-time chat translation for WhatsApp Web using Chrome's Gemini Nano model",
-  "permissions": ["storage", "activeTab", "scripting", "clipboardWrite"],
+  "description": "Real-time chat translation for WhatsApp Web using Chrome's Gemini Nano model with SQLite caching",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "clipboardWrite",
+    "alarms"
+  ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background-loader.js"
   },
   "content_scripts": [
     {
@@ -27,5 +33,16 @@
     "16": "icons/icon.webp",
     "48": "icons/icon.webp",
     "128": "icons/icon.webp"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "sql-wasm.js",
+        "sql-wasm.wasm",
+        "background.js",
+        "cache-manager.js"
+      ],
+      "matches": ["https://web.whatsapp.com/*"]
+    }
+  ]
 }

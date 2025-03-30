@@ -214,6 +214,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Listen for summary results from background script
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log("Popup received message:", message);
+
+    if (message.type === "SUMMARY_RESULT") {
+      console.log("Received SUMMARY_RESULT:", message);
+
+      // Display the summary
+      document.getElementById("summaryContainer").style.display = "block";
+      document.getElementById("summaryText").textContent = message.summary;
+
+      // Hide recording status
+      document.getElementById("summarizeStatus").style.display = "none";
+
+      sendResponse({ success: true });
+      return true;
+    }
+  });
+
+  // Handle stop summarizing click
+  document.getElementById("stopSummarizing").addEventListener("click", (e) => {
+    e.preventDefault();
+    console.log("Stop summarizing clicked");
+
+    // Hide recording status and show "Generating summary..." message
+    document.getElementById("summarizeStatus").style.display = "none";
+
+    // Show loading message in summary container
+    document.getElementById("summaryContainer").style.display = "block";
+    document.getElementById("summaryText").textContent =
+      "Generating summary...";
+
+    // Send message to content script to finish recording and generate summary
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.sendMessage(
+        tabs[0].id,
+        { type: "FINISH_SUMMARIZING" },
+        (response) => {
+          console.log("Received response from FINISH_SUMMARIZING:", response);
+          if (chrome.runtime.lastError) {
+            console.error(
+              "Error sending FINISH_SUMMARIZING message:",
+              chrome.runtime.lastError
+            );
+            document.getElementById("summaryText").textContent =
+              "Error: " + chrome.runtime.lastError.message;
+          }
+        }
+      );
+    });
+  });
+
   // Initialize UI elements
   const inputTextArea = document.getElementById("inputText");
   const translateButton = document.getElementById("translateButton");
